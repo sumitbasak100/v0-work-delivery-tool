@@ -1,10 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
-import { DashboardHeader } from "@/components/dashboard/header"
-import { ProjectHeader } from "@/components/project/project-header"
-import { FileGrid } from "@/components/project/file-grid"
-import { FileUploader } from "@/components/project/file-uploader"
-import { ShareDialog } from "@/components/project/share-dialog"
+import { OwnerProjectView } from "@/components/project/owner-project-view"
 import type { FileWithDetails } from "@/lib/types"
 
 interface ProjectPageProps {
@@ -74,28 +70,5 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     }
   })
 
-  const totalFiles = filesWithDetails.length
-  const approvedFiles = filesWithDetails.filter((f) => f.status === "approved").length
-
-  return (
-    <div className="min-h-screen bg-background">
-      <DashboardHeader user={user} />
-      <main className="container mx-auto px-4 py-8">
-        <ProjectHeader project={project} totalFiles={totalFiles} approvedFiles={approvedFiles} />
-
-        <div className="mt-8 flex flex-col lg:flex-row gap-6">
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Files</h2>
-              <div className="flex items-center gap-2">
-                <ShareDialog project={project} />
-                <FileUploader projectId={project.id} />
-              </div>
-            </div>
-            <FileGrid files={filesWithDetails} projectId={project.id} isOwner />
-          </div>
-        </div>
-      </main>
-    </div>
-  )
+  return <OwnerProjectView project={project} files={filesWithDetails} user={{ id: user.id, email: user.email }} />
 }
