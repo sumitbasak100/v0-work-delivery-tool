@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { ClientProjectView } from "@/components/client/client-project-view"
 import { PasswordGate } from "@/components/client/password-gate"
 import { cookies } from "next/headers"
-import type { FileWithDetails } from "@/lib/types"
+import type { FileWithVersions } from "@/lib/types"
 
 interface ClientPageProps {
   params: Promise<{ shareId: string }>
@@ -60,8 +60,7 @@ export default async function ClientPage({ params }: ClientPageProps) {
       ? await supabase.from("feedback").select("*").in("file_id", fileIds).order("created_at", { ascending: false })
       : { data: [] }
 
-  // Combine data manually
-  const filesWithDetails: FileWithDetails[] = (files || []).map((file) => {
+  const filesWithVersions: FileWithVersions[] = (files || []).map((file) => {
     const versions = (allVersions || []).filter((v) => v.file_id === file.id)
     const feedback = (allFeedback || []).filter((f) => f.file_id === file.id)
     const currentVersion = versions.find((v) => v.id === file.current_version_id) || versions[0]
@@ -74,16 +73,5 @@ export default async function ClientPage({ params }: ClientPageProps) {
     }
   })
 
-  const totalFiles = filesWithDetails.length
-  const approvedFiles = filesWithDetails.filter((f) => f.status === "approved").length
-
-  return (
-    <ClientProjectView
-      project={project}
-      files={filesWithDetails}
-      totalFiles={totalFiles}
-      approvedFiles={approvedFiles}
-      shareId={shareId}
-    />
-  )
+  return <ClientProjectView project={project} initialFiles={filesWithVersions} />
 }

@@ -4,7 +4,6 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Clean, professional color palette - monochromatic with subtle accent */
   --background: oklch(0.99 0 0);
   --foreground: oklch(0.13 0 0);
   --card: oklch(1 0 0);
@@ -24,12 +23,6 @@
   --border: oklch(0.91 0 0);
   --input: oklch(0.91 0 0);
   --ring: oklch(0.25 0 0);
-
-  /* Status colors */
-  --status-pending: oklch(0.75 0.15 85);
-  --status-approved: oklch(0.65 0.2 145);
-  --status-needs-changes: oklch(0.65 0.2 25);
-
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -66,12 +59,6 @@
   --border: oklch(0.25 0 0);
   --input: oklch(0.25 0 0);
   --ring: oklch(0.65 0 0);
-
-  /* Status colors - dark mode */
-  --status-pending: oklch(0.7 0.15 85);
-  --status-approved: oklch(0.6 0.18 145);
-  --status-needs-changes: oklch(0.6 0.18 25);
-
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -114,9 +101,6 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --color-status-pending: var(--status-pending);
-  --color-status-approved: var(--status-approved);
-  --color-status-needs-changes: var(--status-needs-changes);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

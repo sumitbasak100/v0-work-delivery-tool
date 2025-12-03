@@ -40,7 +40,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
 
   return (
     <header className="border-b border-border bg-card">
-      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="max-w-[1280px] mx-auto px-6 h-16 flex items-center justify-between">
         <Link href="/dashboard" className="text-xl font-semibold tracking-tight">
           Delivr
         </Link>

@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
-import { Upload, X, FileImage, FileVideo, FileText } from "lucide-react"
+import { Upload, X, FileImage, FileText } from "lucide-react"
 
 interface FileUploaderProps {
   projectId: string
@@ -32,7 +32,6 @@ const ACCEPTED_TYPES = {
   "image/png": [".png"],
   "image/jpeg": [".jpg", ".jpeg"],
   "image/webp": [".webp"],
-  "video/mp4": [".mp4"],
   "application/pdf": [".pdf"],
 }
 
@@ -55,28 +54,25 @@ export function FileUploader({ projectId }: FileUploaderProps) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: ACCEPTED_TYPES,
-    maxSize: 100 * 1024 * 1024, // 100MB
+    maxSize: 50 * 1024 * 1024, // 50MB
   })
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const getFileType = (mimeType: string): "image" | "video" | "pdf" => {
+  const getFileType = (mimeType: string): "image" | "pdf" => {
     if (mimeType.startsWith("image/")) return "image"
-    if (mimeType.startsWith("video/")) return "video"
     return "pdf"
   }
 
   const getFileIcon = (mimeType: string) => {
     if (mimeType.startsWith("image/")) return FileImage
-    if (mimeType.startsWith("video/")) return FileVideo
     return FileText
   }
 
   const handleUpload = async () => {
     setIsUploading(true)
-    console.log("[v0] Starting upload for", files.length, "files")
 
     for (let i = 0; i < files.length; i++) {
       const uploadFile = files[i]
@@ -85,26 +81,51 @@ export function FileUploader({ projectId }: FileUploaderProps) {
       setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" as const } : f)))
 
       try {
-        // Upload to Vercel Blob
-        const formData = new FormData()
-        formData.append("file", uploadFile.file)
-        formData.append("projectId", projectId)
+        const timestamp = Date.now()
+        const pathname = `${projectId}/${timestamp}-${uploadFile.file.name}`
 
-        console.log("[v0] Uploading file:", uploadFile.file.name, "to project:", projectId)
+        // Use XMLHttpRequest for progress tracking
+        const blobUrl = await new Promise<string>((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+          const formData = new FormData()
+          formData.append("file", uploadFile.file)
+          formData.append("pathname", pathname)
 
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
+          xhr.upload.addEventListener("progress", (e) => {
+            if (e.lengthComputable) {
+              const percent = Math.round((e.loaded / e.total) * 100)
+              setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, progress: percent } : f)))
+            }
+          })
+
+          xhr.addEventListener("load", () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const response = JSON.parse(xhr.responseText)
+                if (response.url) {
+                  resolve(response.url)
+                } else {
+                  reject(new Error(response.error || "Upload failed"))
+                }
+              } catch {
+                reject(new Error("Invalid response"))
+              }
+            } else {
+              try {
+                const response = JSON.parse(xhr.responseText)
+                reject(new Error(response.error || `Upload failed with status ${xhr.status}`))
+              } catch {
+                reject(new Error(`Upload failed with status ${xhr.status}`))
+              }
+            }
+          })
+
+          xhr.addEventListener("error", () => reject(new Error("Network error")))
+          xhr.addEventListener("abort", () => reject(new Error("Upload aborted")))
+
+          xhr.open("POST", "/api/upload")
+          xhr.send(formData)
         })
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.log("[v0] Upload API error:", errorText)
-          throw new Error("Upload failed: " + errorText)
-        }
-
-        const { url } = await response.json()
-        console.log("[v0] File uploaded to blob:", url)
 
         // Create file record in database
         const { data: fileRecord, error: fileError } = await supabase
@@ -118,9 +139,6 @@ export function FileUploader({ projectId }: FileUploaderProps) {
           .select()
           .single()
 
-        console.log("[v0] File record created:", fileRecord)
-        console.log("[v0] File record error:", fileError)
-
         if (fileError) throw fileError
 
         // Create file version
@@ -128,27 +146,18 @@ export function FileUploader({ projectId }: FileUploaderProps) {
           .from("file_versions")
           .insert({
             file_id: fileRecord.id,
-            file_url: url,
+            file_url: blobUrl,
           })
           .select()
           .single()
 
-        console.log("[v0] Version record created:", versionRecord)
-        console.log("[v0] Version record error:", versionError)
-
         if (versionError) throw versionError
 
         // Update file with current version
-        const { error: updateError } = await supabase
-          .from("files")
-          .update({ current_version_id: versionRecord.id })
-          .eq("id", fileRecord.id)
-
-        console.log("[v0] Update current_version_id error:", updateError)
+        await supabase.from("files").update({ current_version_id: versionRecord.id }).eq("id", fileRecord.id)
 
         setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "done" as const, progress: 100 } : f)))
       } catch (error) {
-        console.log("[v0] Upload error:", error)
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i
@@ -196,7 +205,7 @@ export function FileUploader({ projectId }: FileUploaderProps) {
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Upload files</DialogTitle>
-          <DialogDescription>Upload images, videos, or PDFs for your client to review.</DialogDescription>
+          <DialogDescription>Upload images or PDFs for your client to review.</DialogDescription>
         </DialogHeader>
 
         <div
@@ -213,13 +222,13 @@ export function FileUploader({ projectId }: FileUploaderProps) {
           ) : (
             <>
               <p className="text-sm font-medium">Drop files here or click to browse</p>
-              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP, MP4, PDF up to 100MB</p>
+              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP, PDF up to 50MB</p>
             </>
           )}
         </div>
 
         {files.length > 0 && (
-          <div className="space-y-2 max-h-60 overflow-auto">
+          <div className="space-y-2 max-h-60 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {files.map((uploadFile, index) => {
               const Icon = getFileIcon(uploadFile.file.type)
               return (
@@ -228,8 +237,10 @@ export function FileUploader({ projectId }: FileUploaderProps) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{uploadFile.file.name}</p>
                     <div className="flex items-center gap-2">
-                      {uploadFile.status === "uploading" && <Progress value={50} className="h-1 flex-1" />}
-                      {uploadFile.status === "done" && <span className="text-xs text-status-approved">Uploaded</span>}
+                      {uploadFile.status === "uploading" && (
+                        <Progress value={uploadFile.progress} className="h-1 flex-1" />
+                      )}
+                      {uploadFile.status === "done" && <span className="text-xs text-green-600">Uploaded</span>}
                       {uploadFile.status === "error" && (
                         <span className="text-xs text-destructive">{uploadFile.error}</span>
                       )}
