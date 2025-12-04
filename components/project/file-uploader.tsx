@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useDropzone } from "react-dropzone"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,7 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
-import { Upload, X, FileImage, FileText } from "lucide-react"
+import { Upload, X, FileImage, FileText, FileVideo } from "lucide-react"
 
 interface FileUploaderProps {
   projectId: string
@@ -33,6 +32,9 @@ const ACCEPTED_TYPES = {
   "image/jpeg": [".jpg", ".jpeg"],
   "image/webp": [".webp"],
   "application/pdf": [".pdf"],
+  "video/mp4": [".mp4"],
+  "video/webm": [".webm"],
+  "video/quicktime": [".mov"],
 }
 
 export function FileUploader({ projectId }: FileUploaderProps) {
@@ -40,7 +42,6 @@ export function FileUploader({ projectId }: FileUploaderProps) {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles = acceptedFiles.map((file) => ({
@@ -61,13 +62,15 @@ export function FileUploader({ projectId }: FileUploaderProps) {
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const getFileType = (mimeType: string): "image" | "pdf" => {
+  const getFileType = (mimeType: string): "image" | "pdf" | "video" => {
     if (mimeType.startsWith("image/")) return "image"
+    if (mimeType.startsWith("video/")) return "video"
     return "pdf"
   }
 
   const getFileIcon = (mimeType: string) => {
     if (mimeType.startsWith("image/")) return FileImage
+    if (mimeType.startsWith("video/")) return FileVideo
     return FileText
   }
 
@@ -81,83 +84,51 @@ export function FileUploader({ projectId }: FileUploaderProps) {
       setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" as const } : f)))
 
       try {
-        const timestamp = Date.now()
-        const pathname = `${projectId}/${timestamp}-${uploadFile.file.name}`
+        // Use FormData to send file to our API route
+        const formData = new FormData()
+        formData.append("file", uploadFile.file)
+        formData.append("projectId", projectId)
+        formData.append("fileType", getFileType(uploadFile.file.type))
 
         // Use XMLHttpRequest for progress tracking
-        const blobUrl = await new Promise<string>((resolve, reject) => {
+        const result = await new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
           const xhr = new XMLHttpRequest()
-          const formData = new FormData()
-          formData.append("file", uploadFile.file)
-          formData.append("pathname", pathname)
 
-          xhr.upload.addEventListener("progress", (e) => {
-            if (e.lengthComputable) {
-              const percent = Math.round((e.loaded / e.total) * 100)
+          xhr.upload.addEventListener("progress", (event) => {
+            if (event.lengthComputable) {
+              const percent = Math.round((event.loaded / event.total) * 100)
               setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, progress: percent } : f)))
             }
           })
 
           xhr.addEventListener("load", () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                const response = JSON.parse(xhr.responseText)
-                if (response.url) {
-                  resolve(response.url)
-                } else {
-                  reject(new Error(response.error || "Upload failed"))
-                }
-              } catch {
-                reject(new Error("Invalid response"))
-              }
-            } else {
-              try {
-                const response = JSON.parse(xhr.responseText)
+            try {
+              const response = JSON.parse(xhr.responseText)
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(response)
+              } else {
                 reject(new Error(response.error || `Upload failed with status ${xhr.status}`))
-              } catch {
-                reject(new Error(`Upload failed with status ${xhr.status}`))
               }
+            } catch {
+              reject(new Error(`Upload failed with status ${xhr.status}`))
             }
           })
 
-          xhr.addEventListener("error", () => reject(new Error("Network error")))
-          xhr.addEventListener("abort", () => reject(new Error("Upload aborted")))
+          xhr.addEventListener("error", () => {
+            reject(new Error("Network error during upload"))
+          })
 
           xhr.open("POST", "/api/upload")
           xhr.send(formData)
         })
 
-        // Create file record in database
-        const { data: fileRecord, error: fileError } = await supabase
-          .from("files")
-          .insert({
-            project_id: projectId,
-            name: uploadFile.file.name,
-            file_type: getFileType(uploadFile.file.type),
-            status: "pending",
-          })
-          .select()
-          .single()
-
-        if (fileError) throw fileError
-
-        // Create file version
-        const { data: versionRecord, error: versionError } = await supabase
-          .from("file_versions")
-          .insert({
-            file_id: fileRecord.id,
-            file_url: blobUrl,
-          })
-          .select()
-          .single()
-
-        if (versionError) throw versionError
-
-        // Update file with current version
-        await supabase.from("files").update({ current_version_id: versionRecord.id }).eq("id", fileRecord.id)
+        if (!result.success) {
+          throw new Error(result.error || "Upload failed")
+        }
 
         setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "done" as const, progress: 100 } : f)))
       } catch (error) {
+        console.error("Upload error:", error)
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i
@@ -175,7 +146,6 @@ export function FileUploader({ projectId }: FileUploaderProps) {
     setIsUploading(false)
     router.refresh()
 
-    // Close dialog after a short delay if all uploads succeeded
     const allDone = files.every((f) => f.status === "done" || f.status === "error")
     if (allDone) {
       setTimeout(() => {
@@ -205,7 +175,7 @@ export function FileUploader({ projectId }: FileUploaderProps) {
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Upload files</DialogTitle>
-          <DialogDescription>Upload images or PDFs for your client to review.</DialogDescription>
+          <DialogDescription>Upload images, PDFs, or videos for your client to review.</DialogDescription>
         </DialogHeader>
 
         <div
@@ -222,7 +192,7 @@ export function FileUploader({ projectId }: FileUploaderProps) {
           ) : (
             <>
               <p className="text-sm font-medium">Drop files here or click to browse</p>
-              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP, PDF up to 50MB</p>
+              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP, PDF, MP4, WebM, MOV up to 50MB</p>
             </>
           )}
         </div>
