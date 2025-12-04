@@ -2,9 +2,22 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { OwnerProjectView } from "@/components/project/owner-project-view"
 import type { FileWithDetails } from "@/lib/types"
+import type { Metadata } from "next"
 
 interface ProjectPageProps {
   params: Promise<{ id: string }>
+}
+
+export async function generateMetadata({ params }: ProjectPageProps): Promise<Metadata> {
+  const { id } = await params
+  const supabase = await createClient()
+
+  const { data: project } = await supabase.from("projects").select("name").eq("id", id).single()
+
+  return {
+    title: project?.name || "Project",
+    description: `Manage files and approvals for ${project?.name || "this project"}`,
+  }
 }
 
 export default async function ProjectPage({ params }: ProjectPageProps) {

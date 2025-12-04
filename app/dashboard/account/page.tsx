@@ -2,6 +2,12 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { AccountForm } from "@/components/account/account-form"
+import type { Metadata } from "next"
+
+export const metadata: Metadata = {
+  title: "Account Settings",
+  description: "Manage your account settings and preferences.",
+}
 
 export default async function AccountPage() {
   const supabase = await createClient()

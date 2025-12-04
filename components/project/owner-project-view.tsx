@@ -67,6 +67,7 @@ import { formatDistanceToNow } from "date-fns"
 import JSZip from "jszip"
 import { FileViewer } from "@/components/ui/file-viewer"
 import { uploadToSupabaseStorage, getFileType } from "@/lib/upload-to-supabase"
+import { useFileCache } from "@/hooks/use-file-cache"
 
 interface OwnerProjectViewProps {
   project: Project
@@ -123,6 +124,9 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
   const [versionUploadStatus, setVersionUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle")
   // const supabase = createClient() // removed as it causes Failed to fetch errors in preview
 
+  const { getCachedUrl, cacheFile, preloadFile, preloadAllFiles } = useFileCache()
+  const [cachedFileUrl, setCachedFileUrl] = useState<string | null>(null)
+
   const totalFiles = files.length
   const approvedCount = files.filter((f) => f.status === "approved").length
   const needsChangesCount = files.filter((f) => f.status === "needs_changes").length
@@ -171,6 +175,35 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
       setSelectedVersionId(currentFile.current_version_id)
     }
   }, [currentFileId, currentFile])
+
+  useEffect(() => {
+    if (fileUrl && currentFile) {
+      // Cache current file
+      cacheFile(fileUrl).then(setCachedFileUrl)
+
+      // Preload adjacent files
+      if (reviewingIndex !== null && displayFiles.length > 1) {
+        const prevIndex = reviewingIndex > 0 ? reviewingIndex - 1 : displayFiles.length - 1
+        const nextIndex = reviewingIndex < displayFiles.length - 1 ? reviewingIndex + 1 : 0
+
+        const prevUrl = displayFiles[prevIndex]?.current_version?.file_url
+        const nextUrl = displayFiles[nextIndex]?.current_version?.file_url
+
+        if (prevUrl) preloadFile(prevUrl)
+        if (nextUrl) preloadFile(nextUrl)
+      }
+    } else {
+      setCachedFileUrl(null)
+    }
+  }, [fileUrl, currentFile, reviewingIndex, displayFiles, cacheFile, preloadFile])
+
+  useEffect(() => {
+    const allFileUrls = files.map((f) => f.current_version?.file_url).filter((url): url is string => !!url)
+
+    if (allFileUrls.length > 0) {
+      preloadAllFiles(allFileUrls)
+    }
+  }, [files, preloadAllFiles])
 
   const toast = (message: string) => {
     setShowToast(message)
@@ -490,7 +523,14 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
         </div>
       )
 
-    return <FileViewer fileUrl={currentFileUrl} fileName={currentFile.name} fileType={currentFile.file_type} />
+    return (
+      <FileViewer
+        fileUrl={currentFileUrl}
+        fileName={currentFile.name}
+        fileType={currentFile.file_type}
+        cachedUrl={cachedFileUrl}
+      />
+    )
   }
 
   return (

@@ -3,6 +3,12 @@ import { redirect } from "next/navigation"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { ProjectsList } from "@/components/dashboard/projects-list"
 import { CreateProjectDialog } from "@/components/dashboard/create-project-dialog"
+import type { Metadata } from "next"
+
+export const metadata: Metadata = {
+  title: "Dashboard",
+  description: "Manage your projects and track client approvals.",
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient()

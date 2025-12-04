@@ -15,9 +15,12 @@ interface FileViewerProps {
   fileUrl: string
   fileName: string
   fileType: "image" | "video" | "pdf"
+  cachedUrl?: string | null
 }
 
-export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
+export function FileViewer({ fileUrl, fileName, fileType, cachedUrl }: FileViewerProps) {
+  const effectiveUrl = fileType === "pdf" ? fileUrl : cachedUrl || fileUrl
+
   const [zoomIndex, setZoomIndex] = useState(3) // 100% by default
   const [fitMode, setFitMode] = useState<"width" | "height" | "zoom">("zoom")
   const [lastTap, setLastTap] = useState(0)
@@ -51,7 +54,7 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
     setVideoPlaying(false)
     setVideoLoaded(false)
     setVideoError(false)
-  }, [fileUrl])
+  }, [fileUrl]) // Reset on original URL change
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -226,7 +229,7 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
           )}
           <video
             ref={videoRef}
-            src={fileUrl}
+            src={effectiveUrl}
             controls={videoPlaying}
             className="max-w-full max-h-[calc(100vh-200px)] rounded-lg shadow-2xl"
             playsInline
@@ -302,7 +305,12 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
             className={`flex flex-col py-6 ${isContentWider ? "items-start px-6" : "items-center"}`}
             style={isContentWider ? { minWidth: (pdfWidth || 0) + 48 } : undefined}
           >
-            <Document file={fileUrl} onLoadSuccess={onDocumentLoadSuccess} onLoadError={onDocumentLoadError} loading="">
+            <Document
+              file={effectiveUrl}
+              onLoadSuccess={onDocumentLoadSuccess}
+              onLoadError={onDocumentLoadError}
+              loading=""
+            >
               {Array.from(new Array(numPages), (_, index) => (
                 <div key={`page_${index + 1}`} className="shadow-lg rounded-lg overflow-hidden bg-white mb-10">
                   <Page
@@ -383,7 +391,7 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
           <div className="p-6">
             <img
               ref={imageRef}
-              src={fileUrl || "/placeholder.svg"}
+              src={effectiveUrl || "/placeholder.svg"}
               alt={fileName}
               draggable={false}
               onLoad={onImageLoad}
@@ -395,7 +403,7 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
           <div className="h-full p-6 overflow-x-auto flex items-center justify-center">
             <img
               ref={imageRef}
-              src={fileUrl || "/placeholder.svg"}
+              src={effectiveUrl || "/placeholder.svg"}
               alt={fileName}
               draggable={false}
               onLoad={onImageLoad}
@@ -407,7 +415,7 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
           <div className="p-6" style={{ minWidth: zoomedWidth + 48, minHeight: "100%" }}>
             <img
               ref={imageRef}
-              src={fileUrl || "/placeholder.svg"}
+              src={effectiveUrl || "/placeholder.svg"}
               alt={fileName}
               draggable={false}
               onLoad={onImageLoad}

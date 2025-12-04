@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-
+import { useFileCache } from "@/hooks/use-file-cache"
 import { useState, useEffect, useCallback } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -28,10 +28,10 @@ import type { Project, FileWithVersions } from "@/lib/types"
 
 interface ClientProjectViewProps {
   project: Project
-  initialFiles: FileWithVersions[]
+  files: FileWithVersions[]
 }
 
-export function ClientProjectView({ project, initialFiles }: ClientProjectViewProps) {
+export function ClientProjectView({ project, files: initialFiles }: ClientProjectViewProps) {
   const [files, setFiles] = useState<FileWithVersions[]>(initialFiles)
   const [selectedFile, setSelectedFile] = useState<FileWithVersions | null>(null)
   const [filterStatus, setFilterStatus] = useState<"to_review" | "all" | "approved" | "needs_changes">("to_review")
@@ -39,6 +39,17 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
   const [showToast, setShowToast] = useState<{ message: string; type: "success" | "info" } | null>(null)
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null)
   const [isViewingOldVersion, setIsViewingOldVersion] = useState(false)
+  const [cachedFileUrl, setCachedFileUrl] = useState<string | null>(null)
+
+  const { getCachedUrl, cacheFile, preloadFile, preloadAllFiles } = useFileCache()
+
+  useEffect(() => {
+    const allFileUrls = files.map((f) => f.current_version?.file_url).filter((url): url is string => !!url)
+
+    if (allFileUrls.length > 0) {
+      preloadAllFiles(allFileUrls)
+    }
+  }, []) // Only run once on mount
 
   useEffect(() => {
     if (selectedFile) {
@@ -199,6 +210,31 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
     )
   }
 
+  const displayFiles = filteredFiles()
+
+  useEffect(() => {
+    const fileUrl = getSelectedVersionUrl()
+    if (fileUrl && selectedFile) {
+      // Cache current file
+      cacheFile(fileUrl).then(setCachedFileUrl)
+
+      // Preload adjacent files
+      const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
+      if (currentIndex !== -1 && displayFiles.length > 1) {
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : displayFiles.length - 1
+        const nextIndex = currentIndex < displayFiles.length - 1 ? currentIndex + 1 : 0
+
+        const prevUrl = displayFiles[prevIndex]?.current_version?.file_url
+        const nextUrl = displayFiles[nextIndex]?.current_version?.file_url
+
+        if (prevUrl) preloadFile(prevUrl)
+        if (nextUrl) preloadFile(nextUrl)
+      }
+    } else {
+      setCachedFileUrl(null)
+    }
+  }, [selectedFile, selectedVersionId, displayFiles, cacheFile, preloadFile])
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {renderToast()}
@@ -279,7 +315,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
         )}
 
         {/* Empty state */}
-        {filteredFiles().length === 0 && !(filterStatus === "to_review" && pendingCount === 0 && files.length > 0) && (
+        {displayFiles.length === 0 && !(filterStatus === "to_review" && pendingCount === 0 && files.length > 0) && (
           <div className="text-center py-20">
             <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
               <FileText className="h-7 w-7 text-muted-foreground" />
@@ -290,9 +326,9 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
           </div>
         )}
 
-        {filteredFiles().length > 0 && (
+        {displayFiles.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {filteredFiles().map((file) => {
+            {displayFiles.map((file) => {
               const thumbnailUrl = file.current_version?.file_url
               const isApproved = file.status === "approved"
               const needsChanges = file.status === "needs_changes"
@@ -370,7 +406,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
             </button>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
-                {filteredFiles().findIndex((f) => f.id === selectedFile.id) + 1} of {filteredFiles().length}
+                {displayFiles.findIndex((f) => f.id === selectedFile.id) + 1} of {displayFiles.length}
               </span>
             </div>
             <div className="w-16" />
@@ -383,20 +419,20 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
               {/* Navigation */}
               <button
                 onClick={() => {
-                  const currentIndex = filteredFiles().findIndex((f) => f.id === selectedFile.id)
-                  if (currentIndex > 0) setSelectedFile(filteredFiles()[currentIndex - 1])
+                  const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
+                  if (currentIndex > 0) setSelectedFile(displayFiles[currentIndex - 1])
                 }}
-                disabled={filteredFiles().findIndex((f) => f.id === selectedFile.id) === 0}
+                disabled={displayFiles.findIndex((f) => f.id === selectedFile.id) === 0}
                 className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity"
               >
                 <ChevronLeft className="h-6 w-6" />
               </button>
               <button
                 onClick={() => {
-                  const currentIndex = filteredFiles().findIndex((f) => f.id === selectedFile.id)
-                  if (currentIndex < filteredFiles().length - 1) setSelectedFile(filteredFiles()[currentIndex + 1])
+                  const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
+                  if (currentIndex < displayFiles.length - 1) setSelectedFile(displayFiles[currentIndex + 1])
                 }}
-                disabled={filteredFiles().findIndex((f) => f.id === selectedFile.id) === filteredFiles().length - 1}
+                disabled={displayFiles.findIndex((f) => f.id === selectedFile.id) === displayFiles.length - 1}
                 className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity"
               >
                 <ChevronRight className="h-6 w-6" />
@@ -408,6 +444,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                     fileUrl={getSelectedVersionUrl()!}
                     fileName={selectedFile.name}
                     fileType={selectedFile.file_type as "image" | "video" | "pdf"}
+                    cachedUrl={cachedFileUrl}
                   />
                 )}
               </div>
@@ -528,7 +565,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
               {/* Bottom thumbnails */}
               <div className="border-t border-border p-3 shrink-0">
                 <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                  {filteredFiles().map((file) => {
+                  {displayFiles.map((file) => {
                     const isActive = file.id === selectedFile.id
                     return (
                       <button

@@ -4,9 +4,27 @@ import { ClientProjectView } from "@/components/client/client-project-view"
 import { PasswordGate } from "@/components/client/password-gate"
 import { cookies } from "next/headers"
 import type { FileWithVersions } from "@/lib/types"
+import type { Metadata } from "next"
 
 interface ClientPageProps {
   params: Promise<{ shareId: string }>
+}
+
+export async function generateMetadata({ params }: ClientPageProps): Promise<Metadata> {
+  const { shareId } = await params
+  const supabase = await createClient()
+
+  const { data: project } = await supabase
+    .from("projects")
+    .select("name")
+    .eq("share_id", shareId)
+    .eq("is_active", true)
+    .single()
+
+  return {
+    title: project?.name ? `Review: ${project.name}` : "Review Project",
+    description: project?.name ? `Review and approve files for ${project.name}` : "Review and approve project files",
+  }
 }
 
 export default async function ClientPage({ params }: ClientPageProps) {

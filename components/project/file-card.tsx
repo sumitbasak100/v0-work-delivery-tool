@@ -26,6 +26,7 @@ export function FileCard({ file, onClick, isOwner = false }: FileCardProps) {
           fill
           className="object-cover"
           sizes="(max-width: 768px) 50vw, 25vw"
+          loading="lazy"
         />
       )
     }
@@ -33,7 +34,7 @@ export function FileCard({ file, onClick, isOwner = false }: FileCardProps) {
     if (file.file_type === "video" && thumbnailUrl) {
       return (
         <div className="relative h-full w-full">
-          <video src={thumbnailUrl} className="h-full w-full object-cover" muted playsInline />
+          <video src={thumbnailUrl} className="h-full w-full object-cover" muted playsInline preload="none" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
             <Film className="h-8 w-8 text-white" />
           </div>
