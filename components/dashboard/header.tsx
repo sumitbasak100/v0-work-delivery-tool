@@ -42,7 +42,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
     <header className="border-b border-border bg-card">
       <div className="max-w-[1280px] mx-auto px-6 h-16 flex items-center justify-between">
         <Link href="/dashboard" className="text-xl font-semibold tracking-tight">
-          Delivr
+          Sendro
         </Link>
         <div className="flex items-center gap-2">
           <ThemeToggle />

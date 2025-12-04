@@ -8,7 +8,7 @@ export default function SignUpSuccessPage() {
     <div className="min-h-svh flex flex-col">
       <header className="p-4">
         <Link href="/" className="text-xl font-semibold tracking-tight">
-          Delivr
+          Sendro
         </Link>
       </header>
       <div className="flex-1 flex items-center justify-center p-6">

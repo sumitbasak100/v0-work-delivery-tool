@@ -44,7 +44,7 @@ export default function LoginPage() {
     <div className="min-h-svh flex flex-col">
       <header className="p-4 flex justify-between items-center">
         <Link href="/" className="text-xl font-semibold tracking-tight">
-          Delivr
+          Sendro
         </Link>
         <ThemeToggle />
       </header>

@@ -10,7 +10,7 @@ export default function HomePage() {
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
         <div className="max-w-[1280px] mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="text-xl font-bold tracking-tight">
-            Delivr
+            Sendro
           </Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -69,10 +69,6 @@ export default function HomePage() {
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 mx-auto">
                   <Upload className="h-8 w-8 text-primary" />
                 </div>
-                <div
-                  className="absolute top-8 left-1/2 w-full h-px bg-border hidden md:block"
-                  style={{ transform: "translateX(50%)" }}
-                />
                 <h3 className="text-xl font-semibold mb-2">Upload files</h3>
                 <p className="text-muted-foreground">
                   Drag and drop images, videos, and PDFs. Organize them into projects.
@@ -82,10 +78,6 @@ export default function HomePage() {
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 mx-auto">
                   <Link2 className="h-8 w-8 text-primary" />
                 </div>
-                <div
-                  className="absolute top-8 left-1/2 w-full h-px bg-border hidden md:block"
-                  style={{ transform: "translateX(50%)" }}
-                />
                 <h3 className="text-xl font-semibold mb-2">Share a link</h3>
                 <p className="text-muted-foreground">Generate a secure link. Add password protection if needed.</p>
               </div>
@@ -202,7 +194,7 @@ export default function HomePage() {
           <div className="max-w-[1280px] mx-auto px-6 py-24 text-center">
             <h2 className="text-3xl font-bold mb-4">Ready to streamline your workflow?</h2>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              Join hundreds of creative teams already using Delivr.
+              Join hundreds of creative teams already using Sendro.
             </p>
             <Link href="/auth/sign-up">
               <Button size="lg" className="h-12 px-8">
@@ -216,7 +208,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t border-border py-8">
         <div className="max-w-[1280px] mx-auto px-6 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} Delivr. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Sendro. All rights reserved.</p>
         </div>
       </footer>
     </div>

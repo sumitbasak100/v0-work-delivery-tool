@@ -9,7 +9,7 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Delivr - Work Delivery & Client Approval",
+  title: "Sendro - Work Delivery & Client Approval",
   description: "Deliver files to clients and collect approvals with ease. No client login required.",
   generator: "v0.app",
 }

@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     // TODO: Implement actual email sending
     // Example with Resend:
     // await resend.emails.send({
-    //   from: "Delivr <notifications@delivr.app>",
+    //   from: "Sendro <notifications@sendro.app>",
     //   to: ownerEmail,
     //   subject: notification.subject,
     //   text: notification.body,
