@@ -11,7 +11,7 @@ interface CacheEntry {
 // Stores blob URLs so switching between files is instant
 export function useFileCache() {
   const cacheRef = useRef<Map<string, CacheEntry>>(new Map())
-  const MAX_CACHE_SIZE = 50 // Increased to 50 to hold more files
+  const MAX_CACHE_SIZE = 50
 
   const getCachedUrl = useCallback((originalUrl: string): string | null => {
     const entry = cacheRef.current.get(originalUrl)
@@ -55,7 +55,7 @@ export function useFileCache() {
     }
   }, [])
 
-  const preloadFile = useCallback(async (url: string) => {
+  const preloadFile = useCallback(async (url: string): Promise<void> => {
     // Silently preload without blocking
     if (!cacheRef.current.has(url)) {
       try {
@@ -84,15 +84,25 @@ export function useFileCache() {
   }, [])
 
   const preloadAllFiles = useCallback(
-    (urls: string[]) => {
-      // Preload files with a small delay between each to avoid overwhelming the network
-      urls.forEach((url, index) => {
-        if (url && !cacheRef.current.has(url)) {
-          setTimeout(() => {
-            preloadFile(url)
-          }, index * 100) // Stagger by 100ms each
+    async (urls: string[]) => {
+      const BATCH_SIZE = 3 // Load 3 files at a time
+      const BATCH_DELAY = 500 // Wait 500ms between batches
+
+      // Filter out already cached URLs
+      const urlsToPreload = urls.filter((url) => url && !cacheRef.current.has(url))
+
+      // Process in batches
+      for (let i = 0; i < urlsToPreload.length; i += BATCH_SIZE) {
+        const batch = urlsToPreload.slice(i, i + BATCH_SIZE)
+
+        // Load batch in parallel
+        await Promise.all(batch.map((url) => preloadFile(url)))
+
+        // Wait before next batch (except for last batch)
+        if (i + BATCH_SIZE < urlsToPreload.length) {
+          await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY))
         }
-      })
+      }
     },
     [preloadFile],
   )

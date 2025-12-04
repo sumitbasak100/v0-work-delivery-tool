@@ -28,11 +28,11 @@ import type { Project, FileWithVersions } from "@/lib/types"
 
 interface ClientProjectViewProps {
   project: Project
-  files: FileWithVersions[]
+  initialFiles: FileWithVersions[]
 }
 
-export function ClientProjectView({ project, files: initialFiles }: ClientProjectViewProps) {
-  const [files, setFiles] = useState<FileWithVersions[]>(initialFiles)
+export function ClientProjectView({ project, initialFiles }: ClientProjectViewProps) {
+  const [files, setFiles] = useState<FileWithVersions[]>(initialFiles || [])
   const [selectedFile, setSelectedFile] = useState<FileWithVersions | null>(null)
   const [filterStatus, setFilterStatus] = useState<"to_review" | "all" | "approved" | "needs_changes">("to_review")
   const [feedbackText, setFeedbackText] = useState("")
@@ -473,9 +473,10 @@ export function ClientProjectView({ project, files: initialFiles }: ClientProjec
                   {selectedFile.versions && selectedFile.versions.length > 1 ? (
                     <Select
                       value={selectedVersionId || selectedFile.current_version_id || ""}
-                      onValueChange={(val) => {
-                        setSelectedVersionId(val)
-                        setIsViewingOldVersion(val !== selectedFile.current_version_id)
+                      onValueChange={(value) => {
+                        setSelectedVersionId(value)
+                        const isOld = value !== selectedFile.current_version_id
+                        setIsViewingOldVersion(isOld)
                       }}
                     >
                       <SelectTrigger className="h-auto w-auto gap-0.5 px-2 py-0.5 text-xs text-muted-foreground border-0 bg-transparent shadow-none hover:bg-muted focus:ring-0 [&>svg]:hidden group rounded-full shrink-0">
@@ -483,8 +484,8 @@ export function ClientProjectView({ project, files: initialFiles }: ClientProjec
                         <ChevronDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </SelectTrigger>
                       <SelectContent className="min-w-0">
-                        {selectedFile.versions.map((version, idx) => {
-                          const versionNum = selectedFile.versions!.length - idx
+                        {(selectedFile.versions || []).map((version, idx) => {
+                          const versionNum = (selectedFile.versions?.length || 1) - idx
                           const isCurrent = version.id === selectedFile.current_version_id
                           return (
                             <SelectItem key={version.id} value={version.id} className="text-xs">
