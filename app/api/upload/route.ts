@@ -1,53 +1,71 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
-export const runtime = "nodejs"
-
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const formData = await request.formData()
-    const file = formData.get("file") as File | null
-    const projectId = formData.get("projectId") as string | null
-    const fileType = formData.get("fileType") as string | null
+    const contentType = request.headers.get("content-type") || ""
 
-    if (!file || !projectId || !fileType) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    if (!contentType.includes("application/json")) {
+      return NextResponse.json(
+        { error: "Invalid content type. Expected application/json with file metadata." },
+        { status: 400 },
+      )
+    }
+
+    const { projectId, fileId, fileName, fileType, fileUrl, isNewVersion } = await request.json()
+
+    if (!projectId || !fileName || !fileType || !fileUrl) {
+      return NextResponse.json(
+        { error: "Missing required fields: projectId, fileName, fileType, fileUrl" },
+        { status: 400 },
+      )
     }
 
     const supabase = await createClient()
 
-    // Generate unique file path
-    const timestamp = Date.now()
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
-    const filePath = `${projectId}/${timestamp}-${sanitizedName}`
+    if (isNewVersion && fileId) {
+      // Create new version for existing file
+      const { data: versionRecord, error: versionError } = await supabase
+        .from("file_versions")
+        .insert({
+          file_id: fileId,
+          file_url: fileUrl,
+        })
+        .select()
+        .single()
 
-    // Convert File to ArrayBuffer for upload
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+      if (versionError) {
+        console.error("Version record error:", versionError)
+        return NextResponse.json({ error: versionError.message }, { status: 500 })
+      }
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("project-files")
-      .upload(filePath, buffer, {
-        contentType: file.type,
-        upsert: false,
+      // Update file with new current version and reset status to pending
+      const { error: updateError } = await supabase
+        .from("files")
+        .update({
+          current_version_id: versionRecord.id,
+          status: "pending", // Reset status for new version
+        })
+        .eq("id", fileId)
+
+      if (updateError) {
+        console.error("File update error:", updateError)
+        return NextResponse.json({ error: updateError.message }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        fileId: fileId,
+        versionId: versionRecord.id,
       })
-
-    if (uploadError) {
-      console.error("Storage upload error:", uploadError)
-      return NextResponse.json({ error: uploadError.message }, { status: 500 })
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage.from("project-files").getPublicUrl(filePath)
-    const fileUrl = urlData.publicUrl
-
-    // Create file record in database
+    // Create new file record
     const { data: fileRecord, error: fileError } = await supabase
       .from("files")
       .insert({
         project_id: projectId,
-        name: file.name,
+        name: fileName,
         file_type: fileType,
         status: "pending",
       })
@@ -59,7 +77,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: fileError.message }, { status: 500 })
     }
 
-    // Create file version
+    // Create file version with the URL from Supabase Storage
     const { data: versionRecord, error: versionError } = await supabase
       .from("file_versions")
       .insert({
@@ -83,7 +101,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       versionId: versionRecord.id,
     })
   } catch (error) {
-    console.error("Upload error:", error)
+    console.error("Upload API error:", error)
     return NextResponse.json({ error: error instanceof Error ? error.message : "Upload failed" }, { status: 500 })
   }
 }

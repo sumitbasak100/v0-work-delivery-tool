@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { Upload, X, FileImage, FileText, FileVideo } from "lucide-react"
+import { uploadToSupabaseStorage, getFileType } from "@/lib/upload-to-supabase"
 
 interface FileUploaderProps {
   projectId: string
@@ -31,6 +32,7 @@ const ACCEPTED_TYPES = {
   "image/png": [".png"],
   "image/jpeg": [".jpg", ".jpeg"],
   "image/webp": [".webp"],
+  "image/gif": [".gif"],
   "application/pdf": [".pdf"],
   "video/mp4": [".mp4"],
   "video/webm": [".webm"],
@@ -55,17 +57,11 @@ export function FileUploader({ projectId }: FileUploaderProps) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: ACCEPTED_TYPES,
-    maxSize: 50 * 1024 * 1024, // 50MB
+    maxSize: 50 * 1024 * 1024,
   })
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  const getFileType = (mimeType: string): "image" | "pdf" | "video" => {
-    if (mimeType.startsWith("image/")) return "image"
-    if (mimeType.startsWith("video/")) return "video"
-    return "pdf"
   }
 
   const getFileIcon = (mimeType: string) => {
@@ -84,51 +80,30 @@ export function FileUploader({ projectId }: FileUploaderProps) {
       setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" as const } : f)))
 
       try {
-        // Use FormData to send file to our API route
-        const formData = new FormData()
-        formData.append("file", uploadFile.file)
-        formData.append("projectId", projectId)
-        formData.append("fileType", getFileType(uploadFile.file.type))
-
-        // Use XMLHttpRequest for progress tracking
-        const result = await new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
-          const xhr = new XMLHttpRequest()
-
-          xhr.upload.addEventListener("progress", (event) => {
-            if (event.lengthComputable) {
-              const percent = Math.round((event.loaded / event.total) * 100)
-              setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, progress: percent } : f)))
-            }
-          })
-
-          xhr.addEventListener("load", () => {
-            try {
-              const response = JSON.parse(xhr.responseText)
-              if (xhr.status >= 200 && xhr.status < 300) {
-                resolve(response)
-              } else {
-                reject(new Error(response.error || `Upload failed with status ${xhr.status}`))
-              }
-            } catch {
-              reject(new Error(`Upload failed with status ${xhr.status}`))
-            }
-          })
-
-          xhr.addEventListener("error", () => {
-            reject(new Error("Network error during upload"))
-          })
-
-          xhr.open("POST", "/api/upload")
-          xhr.send(formData)
+        // Step 1: Upload file directly to Supabase Storage
+        const fileUrl = await uploadToSupabaseStorage(uploadFile.file, projectId, (progress) => {
+          setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, progress: progress.percent } : f)))
         })
 
-        if (!result.success) {
-          throw new Error(result.error || "Upload failed")
+        // Step 2: Send only metadata to API to create database records
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId,
+            fileName: uploadFile.file.name,
+            fileType: getFileType(uploadFile.file.type),
+            fileUrl,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || "Failed to save file metadata")
         }
 
         setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "done" as const, progress: 100 } : f)))
       } catch (error) {
-        console.error("Upload error:", error)
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i
@@ -192,7 +167,7 @@ export function FileUploader({ projectId }: FileUploaderProps) {
           ) : (
             <>
               <p className="text-sm font-medium">Drop files here or click to browse</p>
-              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP, PDF, MP4, WebM, MOV up to 50MB</p>
+              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP, GIF, PDF, MP4, WebM, MOV up to 50MB</p>
             </>
           )}
         </div>

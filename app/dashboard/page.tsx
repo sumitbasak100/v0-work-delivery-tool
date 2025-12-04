@@ -43,8 +43,12 @@ export default async function DashboardPage() {
       <main className="max-w-[1280px] mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
-            <p className="text-muted-foreground mt-1">Manage your work delivery projects</p>
+            <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              {projectsWithStats.length === 0
+                ? "Create your first project to get started"
+                : `${projectsWithStats.length} project${projectsWithStats.length !== 1 ? "s" : ""}`}
+            </p>
           </div>
           <CreateProjectDialog />
         </div>

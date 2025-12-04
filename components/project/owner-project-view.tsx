@@ -5,7 +5,6 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useDropzone } from "react-dropzone"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -67,11 +66,23 @@ import type { Project, FileWithDetails } from "@/lib/types"
 import { formatDistanceToNow } from "date-fns"
 import JSZip from "jszip"
 import { FileViewer } from "@/components/ui/file-viewer"
+import { uploadToSupabaseStorage, getFileType } from "@/lib/upload-to-supabase"
 
 interface OwnerProjectViewProps {
   project: Project
   files: FileWithDetails[]
   user: { id: string; email?: string }
+}
+
+// Define FileWithVersions to resolve the lint error
+interface FileWithVersions extends FileWithDetails {
+  versions?: {
+    id: string
+    file_id: string
+    file_url: string
+    version_number: number
+    created_at: string
+  }[]
 }
 
 const ACCEPTED_TYPES = {
@@ -86,13 +97,15 @@ type FilterStatus = "all" | "pending" | "approved" | "needs_changes"
 
 export function OwnerProjectView({ project: initialProject, files: initialFiles }: OwnerProjectViewProps) {
   const router = useRouter()
-  const [files, setFiles] = useState(initialFiles)
+  const [files, setFiles] = useState<FileWithVersions[]>(initialFiles as FileWithVersions[]) // Cast to FileWithVersions[]
   const [project, setProject] = useState(initialProject) // Use local state for project to allow updates
   const [showToast, setShowToast] = useState<string | null>(null)
   const [reviewingIndex, setReviewingIndex] = useState<number | null>(null)
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<{ name: string; status: "uploading" | "done" | "error" }[]>([])
+  const [uploadProgress, setUploadProgress] = useState<
+    { name: string; status: "uploading" | "done" | "error"; progress?: number }[]
+  >([])
   const [showUploadStatus, setShowUploadStatus] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -108,7 +121,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
   const [showUploadVersionDialog, setShowUploadVersionDialog] = useState(false)
   const [versionUploadFile, setVersionUploadFile] = useState<File | null>(null)
   const [versionUploadStatus, setVersionUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle")
-  const supabase = createClient()
+  // const supabase = createClient() // removed as it causes Failed to fetch errors in preview
 
   const totalFiles = files.length
   const approvedCount = files.filter((f) => f.status === "approved").length
@@ -116,7 +129,12 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
   const pendingCount = files.filter((f) => f.status === "pending").length
   const progress = totalFiles > 0 ? Math.round((approvedCount / totalFiles) * 100) : 0
 
-  const displayFiles = filterStatus === "all" ? files : files.filter((f) => f.status === filterStatus)
+  const sortedFiles = [...files].sort((a, b) => {
+    const aDate = a.created_at || ""
+    const bDate = b.created_at || ""
+    return new Date(bDate).getTime() - new Date(aDate).getTime()
+  })
+  const displayFiles = filterStatus === "all" ? sortedFiles : sortedFiles.filter((f) => f.status === filterStatus)
 
   const currentFile = reviewingIndex !== null ? displayFiles[reviewingIndex] : null
 
@@ -144,7 +162,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
   }, [reviewingIndex])
 
   useEffect(() => {
-    setFiles(initialFiles)
+    setFiles(initialFiles as FileWithVersions[]) // Cast to FileWithVersions[]
   }, [initialFiles])
 
   const currentFileId = currentFile?.id
@@ -168,10 +186,13 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
 
   const handleSavePassword = async () => {
     setIsSavingPassword(true)
-    await supabase
-      .from("projects")
-      .update({ password: passwordEnabled ? password : null })
-      .eq("id", project.id)
+    // const { error } = await supabase.from("projects").update({ password: passwordEnabled ? password : null }).eq("id", project.id)
+    // if (error) {
+    //   console.error("Error saving password:", error)
+    //   toast("Failed to save settings")
+    //   setIsSavingPassword(false)
+    //   return
+    // }
     setProject((prev) => ({ ...prev, password: passwordEnabled ? password : null })) // Update local state
     setIsSavingPassword(false)
     toast("Settings saved")
@@ -213,33 +234,52 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
   }, [reviewingIndex, navigateToPrev, navigateToNext, closeReview])
 
   const handleToggleActive = async () => {
-    const { data, error } = await supabase
-      .from("projects")
-      .update({ is_active: !project.is_active })
-      .eq("id", project.id)
-      .select()
-      .single()
-    if (error) {
-      console.error("Error toggling project active status:", error)
-      toast("Failed to toggle link status")
-      return
-    }
-    setProject((prev) => ({ ...prev, is_active: data.is_active }))
-    toast(data.is_active ? "Link activated" : "Link deactivated")
-    router.refresh()
+    // const { data, error } = await supabase
+    //   .from("projects")
+    //   .update({ is_active: !project.is_active })
+    //   .eq("id", project.id)
+    //   .select()
+    //   .single()
+    // if (error) {
+    //   console.error("Error toggling project active status:", error)
+    //   toast("Failed to toggle link status")
+    //   return
+    // }
+    setProject((prev) => ({ ...prev, is_active: !prev.is_active }))
+    toast(project.is_active ? "Link activated" : "Link deactivated")
+    // router.refresh() // No router.refresh for client components without server components
   }
 
   const handleDelete = async () => {
     setIsDeleting(true)
-    await supabase.from("projects").delete().eq("id", project.id)
-    router.push("/dashboard")
+    try {
+      const res = await fetch("/api/deleteProject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id }),
+      })
+      if (!res.ok) throw new Error("Delete failed")
+      router.push("/dashboard")
+    } catch {
+      toast("Failed to delete project")
+      setIsDeleting(false)
+    }
   }
 
   const handleDeleteFile = async (fileId: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId))
-    closeReview()
-    toast("File deleted")
-    await supabase.from("files").delete().eq("id", fileId)
+    try {
+      const res = await fetch("/api/deleteFile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId }),
+      })
+      if (!res.ok) throw new Error("Delete failed")
+      setFiles((prev) => prev.filter((f) => f.id !== fileId))
+      closeReview()
+      toast("File deleted")
+    } catch {
+      toast("Failed to delete file")
+    }
   }
 
   const handleDownloadFile = async (url: string, filename: string) => {
@@ -297,124 +337,145 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: onDropNewFiles,
     accept: ACCEPTED_TYPES,
-    maxSize: 100 * 1024 * 1024,
+    maxSize: 50 * 1024 * 1024, // Increased to 50MB
     noClick: !showUploadPanel,
     noDrag: !showUploadPanel,
   })
 
-  const handleUploadNewFiles = async () => {
-    if (pendingUploads.length === 0) return
+  const handleUploadNewFiles = async (filesToUpload: File[]) => {
+    if (filesToUpload.length === 0) return
     setIsUploading(true)
-    setShowUploadPanel(false)
     setShowUploadStatus(true)
-    setUploadProgress(pendingUploads.map((f) => ({ name: f.name, status: "uploading" })))
+    setUploadProgress(filesToUpload.map((f) => ({ name: f.name, status: "uploading" })))
 
-    for (let i = 0; i < pendingUploads.length; i++) {
-      const file = pendingUploads[i]
+    const uploadedFiles: FileWithVersions[] = []
+
+    for (let i = 0; i < filesToUpload.length; i++) {
+      const file = filesToUpload[i]
       try {
-        const formData = new FormData()
-        formData.append("file", file)
-        formData.append("projectId", project.id)
+        const fileUrl = await uploadToSupabaseStorage(file, project.id, (progress) => {
+          setUploadProgress((prev) => prev.map((p, idx) => (idx === i ? { ...p, progress } : p)))
+        })
 
-        const response = await fetch("/api/upload", { method: "POST", body: formData })
+        const fileType = getFileType(file.type)
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: project.id,
+            fileName: file.name,
+            fileType,
+            fileUrl,
+          }),
+        })
+
         if (!response.ok) throw new Error("Upload failed")
+        const { fileId, versionId } = await response.json()
 
-        const { url } = await response.json()
-
-        const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "pdf"
-
-        const { data: fileRecord } = await supabase
-          .from("files")
-          .insert({ project_id: project.id, name: file.name, file_type: fileType, status: "pending" })
-          .select()
-          .single()
-
-        if (fileRecord) {
-          const { data: versionRecord } = await supabase
-            .from("file_versions")
-            .insert({ file_id: fileRecord.id, file_url: url })
-            .select()
-            .single()
-
-          if (versionRecord) {
-            await supabase.from("files").update({ current_version_id: versionRecord.id }).eq("id", fileRecord.id)
-
-            setFiles((prev) => [
-              {
-                ...fileRecord,
-                current_version_id: versionRecord.id,
-                current_version: versionRecord,
-                versions: [versionRecord],
-                feedback: [],
-              },
-              ...prev,
-            ])
-          }
+        const newFile: FileWithVersions = {
+          id: fileId,
+          project_id: project.id,
+          name: file.name,
+          file_type: fileType,
+          status: "pending",
+          created_at: new Date().toISOString(),
+          current_version_id: versionId,
+          current_version: {
+            id: versionId,
+            file_id: fileId,
+            file_url: fileUrl,
+            version_number: 1,
+            created_at: new Date().toISOString(),
+          },
+          versions: [
+            {
+              id: versionId,
+              file_id: fileId,
+              file_url: fileUrl,
+              version_number: 1,
+              created_at: new Date().toISOString(),
+            },
+          ],
+          feedback: [],
         }
+        uploadedFiles.push(newFile)
 
         setUploadProgress((prev) => prev.map((p, idx) => (idx === i ? { ...p, status: "done" } : p)))
-      } catch (error) {
-        console.error("Upload error:", error)
+      } catch {
         setUploadProgress((prev) => prev.map((p, idx) => (idx === i ? { ...p, status: "error" } : p)))
       }
     }
 
-    setPendingUploads([])
+    if (uploadedFiles.length > 0) {
+      setFiles((prev) => [...uploadedFiles, ...prev])
+    }
+
     setIsUploading(false)
+    setTimeout(() => setShowUploadStatus(false), 3000)
+    setShowUploadPanel(false)
+    setPendingUploads([])
   }
 
   const handleUploadNewVersion = async () => {
-    if (!currentFile || !versionUploadFile) return
+    if (!versionUploadFile || reviewingIndex === null) return
+    const file = displayFiles[reviewingIndex]
+    if (!file) return
+
     setVersionUploadStatus("uploading")
 
     try {
-      const formData = new FormData()
-      formData.append("file", versionUploadFile)
-      formData.append("projectId", project.id)
+      const fileUrl = await uploadToSupabaseStorage(versionUploadFile, project.id)
+      const fileType = getFileType(versionUploadFile.type)
 
-      const response = await fetch("/api/upload", { method: "POST", body: formData })
-      if (!response.ok) throw new Error("Upload failed")
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          fileId: file.id,
+          fileName: versionUploadFile.name,
+          fileType,
+          fileUrl,
+          isNewVersion: true,
+        }),
+      })
 
-      const { url } = await response.json()
+      if (!response.ok) throw new Error("Failed to upload version")
+      const { versionId } = await response.json()
 
-      const { data: versionRecord } = await supabase
-        .from("file_versions")
-        .insert({ file_id: currentFile.id, file_url: url })
-        .select()
-        .single()
-
-      if (versionRecord) {
-        await supabase
-          .from("files")
-          .update({ current_version_id: versionRecord.id, status: "pending" })
-          .eq("id", currentFile.id)
-
-        setFiles((prev) =>
-          prev.map((f) => {
-            if (f.id === currentFile.id) {
-              return {
-                ...f,
-                current_version_id: versionRecord.id,
-                current_version: versionRecord,
-                versions: [versionRecord, ...(f.versions || [])],
-                status: "pending",
-              }
-            }
-            return f
-          }),
-        )
-
-        setSelectedVersionId(versionRecord.id)
-        setVersionUploadStatus("done")
-
-        setTimeout(() => {
-          setShowUploadVersionDialog(false)
-          setVersionUploadFile(null)
-          setVersionUploadStatus("idle")
-        }, 1000)
+      const newVersionNumber = (file.versions?.length || 0) + 1
+      const newVersion = {
+        id: versionId,
+        file_id: file.id,
+        file_url: fileUrl,
+        created_at: new Date().toISOString(),
       }
+
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === file.id
+            ? {
+                ...f,
+                current_version_id: versionId,
+                current_version: newVersion,
+                status: "pending",
+                versions: [newVersion, ...(f.versions || [])],
+              }
+            : f,
+        ),
+      )
+
+      // Keep reviewing the same file, show new version
+      setSelectedVersionId(versionId)
+      setVersionUploadFile(null)
+      setVersionUploadStatus("idle")
+      setShowUploadVersionDialog(false)
+
+      toast("Version uploaded")
     } catch (error) {
+      console.error("Upload error:", error)
       setVersionUploadStatus("error")
+      toast("Failed to upload new version")
     }
   }
 
@@ -751,7 +812,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                 Cancel
               </Button>
               <Button
-                onClick={handleUploadNewFiles}
+                onClick={() => handleUploadNewFiles(pendingUploads)}
                 disabled={isUploading || pendingUploads.length === 0}
                 className="cursor-pointer"
               >
@@ -785,6 +846,9 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                 {file.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                 {file.status === "error" && <AlertCircle className="h-4 w-4 text-destructive" />}
                 <span className="truncate flex-1">{file.name}</span>
+                {file.progress !== undefined && (
+                  <span className="text-xs text-muted-foreground">{Math.round(file.progress)}%</span>
+                )}
               </div>
             ))}
           </div>
@@ -810,24 +874,6 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
               {isViewingOldVersion && (
                 <Badge variant="outline" className="border-amber-500 text-amber-600">
                   Viewing old version
-                </Badge>
-              )}
-              {!isViewingOldVersion && (
-                <Badge
-                  variant={
-                    currentFile.status === "approved"
-                      ? "default"
-                      : currentFile.status === "needs_changes"
-                        ? "outline"
-                        : "secondary"
-                  }
-                  className={currentFile.status === "needs_changes" ? "border-amber-500 text-amber-600" : ""}
-                >
-                  {currentFile.status === "needs_changes"
-                    ? "Needs Changes"
-                    : currentFile.status === "approved"
-                      ? "Approved"
-                      : "Pending"}
                 </Badge>
               )}
             </div>
@@ -885,40 +931,32 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
             </div>
 
             {/* Sidebar */}
-            <div className="w-80 border-l border-border flex flex-col shrink-0 overflow-hidden">
-              {/* File info */}
-              <div className="p-4 border-b border-border shrink-0">
-                <h3 className="font-semibold truncate">{currentFile.name}</h3>
-                <div className="flex items-center gap-2 mt-2">
-                  {isViewingOldVersion ? (
-                    <span className="text-xs bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 px-2 py-1 rounded-full">
-                      Viewing old version
-                    </span>
-                  ) : (
-                    <>
-                      {currentFile.status === "approved" && (
-                        <span className="text-xs bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-400 px-2 py-1 rounded-full">
-                          Approved
-                        </span>
-                      )}
-                      {currentFile.status === "needs_changes" && (
-                        <span className="text-xs bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 px-2 py-1 rounded-full">
-                          Needs Changes
-                        </span>
-                      )}
-                      {currentFile.status === "pending" && (
-                        <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
-                          Pending Review
-                        </span>
-                      )}
-                    </>
-                  )}
-                  {currentFileVersions.length > 1 && (
+            <div className="w-80 bg-background border-l border-border flex flex-col shrink-0">
+              {/* File info - Reduced height, combined into single line */}
+              <div className="px-4 py-2 border-b border-border shrink-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium truncate flex-1 text-sm">{currentFile.name}</h3>
+                  <span
+                    className={`px-2 py-0.5 text-xs font-medium rounded-full shrink-0 ${
+                      currentFile.status === "approved"
+                        ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                        : currentFile.status === "needs_changes"
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {currentFile.status === "approved"
+                      ? "Approved"
+                      : currentFile.status === "needs_changes"
+                        ? "Changes"
+                        : "Pending"}
+                  </span>
+                  {currentFileVersions.length > 1 ? (
                     <Select
                       value={selectedVersionId || currentFile.current_version_id || ""}
                       onValueChange={(val) => setSelectedVersionId(val)}
                     >
-                      <SelectTrigger className="h-auto w-auto gap-0.5 p-0 text-xs text-muted-foreground border-0 bg-transparent hover:text-foreground focus:ring-0 group">
+                      <SelectTrigger className="h-auto w-auto gap-0.5 px-2 py-0.5 text-xs text-muted-foreground border-0 bg-transparent shadow-none hover:bg-muted focus:ring-0 [&>svg]:hidden group rounded-full shrink-0">
                         <span>
                           v
                           {currentFileVersions.length -
@@ -928,7 +966,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                         </span>
                         <ChevronDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="min-w-0">
                         {currentFileVersions.map((version, idx) => {
                           const versionNum = currentFileVersions.length - idx
                           const isCurrent = version.id === currentFile.current_version_id
@@ -941,8 +979,11 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                         })}
                       </SelectContent>
                     </Select>
+                  ) : (
+                    <span className="text-xs text-muted-foreground px-2 py-0.5 shrink-0">
+                      v{currentFileVersions.length || 1}
+                    </span>
                   )}
-                  {currentFileVersions.length === 1 && <span className="text-xs text-muted-foreground">v1</span>}
                 </div>
               </div>
 

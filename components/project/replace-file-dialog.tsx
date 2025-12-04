@@ -1,9 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { useRouter } from "next/navigation"
 import { useDropzone } from "react-dropzone"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,27 +12,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { RefreshCw, Upload } from "lucide-react"
-import type { FileWithDetails } from "@/lib/types"
+import { Upload, RefreshCw } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { uploadToSupabaseStorage } from "@/lib/upload-to-supabase"
 
 interface ReplaceFileDialogProps {
-  file: FileWithDetails
+  file: {
+    id: string
+    project_id: string
+    name: string
+    file_type: string
+  }
+  onSuccess?: () => void
 }
 
-const ACCEPTED_TYPES = {
-  "image/png": [".png"],
-  "image/jpeg": [".jpg", ".jpeg"],
-  "image/webp": [".webp"],
-  "video/mp4": [".mp4"],
-  "application/pdf": [".pdf"],
-}
-
-export function ReplaceFileDialog({ file }: ReplaceFileDialogProps) {
+export function ReplaceFileDialog({ file, onSuccess }: ReplaceFileDialogProps) {
   const [open, setOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
   const supabase = createClient()
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -46,8 +42,12 @@ export function ReplaceFileDialog({ file }: ReplaceFileDialogProps) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: ACCEPTED_TYPES,
-    maxSize: 100 * 1024 * 1024,
+    accept: {
+      "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif"],
+      "application/pdf": [".pdf"],
+      "video/*": [".mp4", ".webm", ".mov"],
+    },
+    maxSize: 50 * 1024 * 1024,
     maxFiles: 1,
   })
 
@@ -58,21 +58,7 @@ export function ReplaceFileDialog({ file }: ReplaceFileDialogProps) {
     setError(null)
 
     try {
-      // Upload to Vercel Blob
-      const formData = new FormData()
-      formData.append("file", selectedFile)
-      formData.append("projectId", file.project_id)
-
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) {
-        throw new Error("Upload failed")
-      }
-
-      const { url } = await response.json()
+      const url = await uploadToSupabaseStorage(selectedFile, file.project_id)
 
       // Create new file version
       const { data: versionRecord, error: versionError } = await supabase
@@ -98,8 +84,9 @@ export function ReplaceFileDialog({ file }: ReplaceFileDialogProps) {
 
       setOpen(false)
       setSelectedFile(null)
-      router.refresh()
+      onSuccess?.()
     } catch (err) {
+      console.error("Upload error:", err)
       setError(err instanceof Error ? err.message : "Upload failed")
     } finally {
       setIsUploading(false)
@@ -107,28 +94,17 @@ export function ReplaceFileDialog({ file }: ReplaceFileDialogProps) {
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o)
-        if (!o) {
-          setSelectedFile(null)
-          setError(null)
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-          <RefreshCw className="h-3 w-3" />
+          <RefreshCw className="h-4 w-4" />
           Replace
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Replace file</DialogTitle>
-          <DialogDescription>
-            Upload a new version of &quot;{file.name}&quot;. This will reset the approval status.
-          </DialogDescription>
+          <DialogDescription>Upload a new version of "{file.name}"</DialogDescription>
         </DialogHeader>
 
         <div
@@ -142,11 +118,10 @@ export function ReplaceFileDialog({ file }: ReplaceFileDialogProps) {
           <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
           {selectedFile ? (
             <p className="text-sm font-medium">{selectedFile.name}</p>
+          ) : isDragActive ? (
+            <p className="text-sm">Drop file here...</p>
           ) : (
-            <>
-              <p className="text-sm font-medium">Drop file here or click to browse</p>
-              <p className="text-xs text-muted-foreground mt-1">Same file types accepted</p>
-            </>
+            <p className="text-sm">Drop file here or click to browse</p>
           )}
         </div>
 
@@ -156,8 +131,8 @@ export function ReplaceFileDialog({ file }: ReplaceFileDialogProps) {
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleUpload} disabled={isUploading || !selectedFile}>
-            {isUploading ? "Uploading..." : "Upload new version"}
+          <Button onClick={handleUpload} disabled={!selectedFile || isUploading}>
+            {isUploading ? "Uploading..." : "Upload"}
           </Button>
         </DialogFooter>
       </DialogContent>

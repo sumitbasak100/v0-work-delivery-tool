@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { ZoomIn, ZoomOut, Maximize, MoveHorizontal, Loader2 } from "lucide-react"
+import { ZoomIn, ZoomOut, Maximize, MoveHorizontal, Loader2, Play } from "lucide-react"
 import { Document, Page, pdfjs } from "react-pdf"
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
@@ -19,10 +19,11 @@ interface FileViewerProps {
 
 export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
   const [zoomIndex, setZoomIndex] = useState(3) // 100% by default
-  const [fitMode, setFitMode] = useState<"width" | "height" | "zoom">("zoom") // Default to zoom mode at 100%
+  const [fitMode, setFitMode] = useState<"width" | "height" | "zoom">("zoom")
   const [lastTap, setLastTap] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 })
@@ -32,6 +33,10 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
   const [pdfLoading, setPdfLoading] = useState(true)
   const [pdfError, setPdfError] = useState<string | null>(null)
   const [pdfPageSize, setPdfPageSize] = useState({ width: 0, height: 0 })
+
+  const [videoPlaying, setVideoPlaying] = useState(false)
+  const [videoLoaded, setVideoLoaded] = useState(false)
+  const [videoError, setVideoError] = useState(false)
 
   const zoom = ZOOM_LEVELS[zoomIndex]
 
@@ -43,6 +48,9 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
     setPdfError(null)
     setImageNaturalSize({ width: 0, height: 0 })
     setPdfPageSize({ width: 0, height: 0 })
+    setVideoPlaying(false)
+    setVideoLoaded(false)
+    setVideoError(false)
   }, [fileUrl])
 
   useEffect(() => {
@@ -190,6 +198,13 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
     setImageNaturalSize({ width: img.naturalWidth, height: img.naturalHeight })
   }
 
+  const handlePlayVideo = () => {
+    if (videoRef.current) {
+      videoRef.current.play()
+      setVideoPlaying(true)
+    }
+  }
+
   const effectiveZoom = calculateEffectiveZoom()
   const effectiveIndex = findClosestZoomIndex(effectiveZoom)
   const canZoomOut = effectiveIndex > 0 || effectiveZoom > ZOOM_LEVELS[0]
@@ -197,12 +212,47 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
 
   if (fileType === "video") {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-black/5 dark:bg-white/5">
-        <video src={fileUrl} controls className="max-w-full max-h-full rounded-lg shadow-2xl" autoPlay playsInline />
+      <div ref={containerRef} className="w-full h-full flex items-center justify-center bg-black/5 dark:bg-white/5 p-6">
+        <div className="relative max-w-full max-h-full">
+          {!videoLoaded && !videoError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-muted rounded-lg min-w-[300px] min-h-[200px]">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {videoError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-muted rounded-lg min-w-[300px] min-h-[200px]">
+              <p className="text-sm text-muted-foreground">Failed to load video</p>
+            </div>
+          )}
+          <video
+            ref={videoRef}
+            src={fileUrl}
+            controls={videoPlaying}
+            className="max-w-full max-h-[calc(100vh-200px)] rounded-lg shadow-2xl"
+            playsInline
+            preload="auto"
+            onLoadedData={() => setVideoLoaded(true)}
+            onError={() => setVideoError(true)}
+            onPlay={() => setVideoPlaying(true)}
+            onPause={() => setVideoPlaying(false)}
+            onEnded={() => setVideoPlaying(false)}
+          />
+          {videoLoaded && !videoPlaying && (
+            <button
+              onClick={handlePlayVideo}
+              className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors cursor-pointer rounded-lg"
+            >
+              <div className="h-20 w-20 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                <Play className="h-10 w-10 text-foreground ml-1" fill="currentColor" />
+              </div>
+            </button>
+          )}
+        </div>
       </div>
     )
   }
 
+  // PDF viewer
   if (fileType === "pdf") {
     let pdfWidth: number | undefined
 
@@ -216,7 +266,6 @@ export function FileViewer({ fileUrl, fileName, fileType }: FileViewerProps) {
         pdfWidth = containerSize.width - 48
       }
     } else {
-      // Zoom mode - 100% = 80% of container width
       const baseWidth = containerSize.width * 0.8
       pdfWidth = baseWidth * (zoom / 100)
     }

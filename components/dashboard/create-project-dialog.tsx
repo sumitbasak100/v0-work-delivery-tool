@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -17,13 +16,11 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Plus } from "lucide-react"
+import { Plus, Loader2 } from "lucide-react"
 
 export function CreateProjectDialog() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -57,7 +54,6 @@ export function CreateProjectDialog() {
         .from("projects")
         .insert({
           name,
-          description: description || null,
           user_id: user.id,
         })
         .select()
@@ -67,9 +63,7 @@ export function CreateProjectDialog() {
 
       setOpen(false)
       setName("")
-      setDescription("")
       router.push(`/dashboard/projects/${data.id}`)
-      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create project")
     } finally {
@@ -85,41 +79,39 @@ export function CreateProjectDialog() {
           New Project
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <form onSubmit={handleCreate}>
           <DialogHeader>
-            <DialogTitle>Create new project</DialogTitle>
-            <DialogDescription>Create a project to organize files for your client.</DialogDescription>
+            <DialogTitle>New Project</DialogTitle>
+            <DialogDescription>Create a project to organize and share files with your client.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
+          <div className="py-6">
+            <div className="space-y-2">
               <Label htmlFor="name">Project name</Label>
               <Input
                 id="name"
-                placeholder="Website Redesign"
+                placeholder="e.g. Website Redesign"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                autoFocus
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
-                id="description"
-                placeholder="Brief description of the project..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-sm text-destructive mt-3">{error}</p>}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isLoading || !name.trim()}>
-              {isLoading ? "Creating..." : "Create project"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Project"
+              )}
             </Button>
           </DialogFooter>
         </form>
