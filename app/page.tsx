@@ -55,34 +55,8 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Social Proof */}
-        <section className="border-y border-border bg-muted/20">
-          <div className="max-w-[1280px] mx-auto px-6 py-8">
-            <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16 text-center">
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  Trusted by <strong className="text-foreground">500+</strong> creative teams
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <FileCheck className="h-5 w-5 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  <strong className="text-foreground">10,000+</strong> files delivered
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  <strong className="text-foreground">2x faster</strong> approval cycles
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* How it works */}
-        <section className="bg-background">
+        <section className="border-t border-border bg-background">
           <div className="max-w-[1280px] mx-auto px-6 py-24">
             <div className="text-center mb-16">
               <h2 className="text-3xl font-bold mb-4">How it works</h2>
