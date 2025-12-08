@@ -627,36 +627,37 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                 {displayFiles.findIndex((f) => f.id === selectedFile.id) + 1} of {displayFiles.length}
               </span>
             </div>
-            <button
-              onClick={() => setShowMobileSidebar(!showMobileSidebar)}
-              className="md:hidden flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
-            >
-              <MessageSquare className="h-5 w-5" />
-              {getVersionFeedback().length > 0 && (
-                <span className="text-xs bg-primary text-primary-foreground rounded-full px-1.5">
-                  {getVersionFeedback().length}
-                </span>
-              )}
-            </button>
-            <div className="w-16 hidden md:block" />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowMobileSidebar(!showMobileSidebar)}
+                className="md:hidden flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <MessageSquare className="h-5 w-5" />
+                {getVersionFeedback().length > 0 && (
+                  <span className="text-xs bg-primary text-primary-foreground rounded-full px-1.5">
+                    {getVersionFeedback().length}
+                  </span>
+                )}
+              </button>
+              <div className="w-8 hidden md:block" />
+            </div>
           </header>
 
           {/* Main content */}
           <div className="flex-1 flex overflow-hidden relative">
             {/* File preview area */}
             <div className="flex-1 relative bg-muted/30 flex flex-col overflow-hidden">
-              {/* Navigation buttons - hidden on mobile, use swipe */}
               <button
                 onClick={() => navigateFile(-1)}
                 disabled={displayFiles.findIndex((f) => f.id === selectedFile.id) === 0}
-                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity md:hidden"
+                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity"
               >
                 <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
               <button
                 onClick={() => navigateFile(1)}
                 disabled={displayFiles.findIndex((f) => f.id === selectedFile.id) === displayFiles.length - 1}
-                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity md:right-4 md:hidden"
+                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity"
               >
                 <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>

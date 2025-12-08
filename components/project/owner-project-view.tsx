@@ -583,15 +583,16 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
       {/* Header */}
       <header className="border-b border-border bg-card shrink-0">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-3 sm:py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <Link
                 href="/dashboard"
                 className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-sm shrink-0"
               >
                 <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Back</span>
+                <span>Back</span>
               </Link>
+              <div className="h-4 w-px bg-border" />
               <h1 className="text-lg sm:text-xl font-semibold truncate">{project.name}</h1>
               {!project.is_active && (
                 <Badge variant="secondary" className="shrink-0 text-xs">
@@ -599,11 +600,11 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-2 sm:ml-auto">
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-1.5 cursor-pointer flex-1 sm:flex-none bg-transparent"
+                className="gap-1.5 cursor-pointer bg-transparent"
                 onClick={handleDownloadAll}
               >
                 <Download className="h-3.5 w-3.5" />
@@ -612,31 +613,42 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-1.5 cursor-pointer flex-1 sm:flex-none bg-transparent"
+                className="gap-1.5 cursor-pointer bg-transparent"
                 onClick={() => setShowShareDialog(true)}
               >
                 <Share2 className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Share</span>
               </Button>
-              <Button variant="outline" size="sm" asChild className="flex-1 sm:flex-none bg-transparent">
-                <Link href={`/dashboard/projects/${project.id}/edit`} className="gap-1.5 cursor-pointer">
-                  <Pencil className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Edit</span>
-                </Link>
-              </Button>
               {project.share_id && project.is_active && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  className="gap-1.5 cursor-pointer flex-1 sm:flex-none bg-transparent"
-                >
+                <Button variant="outline" size="sm" asChild className="gap-1.5 cursor-pointer bg-transparent">
                   <Link href={`/p/${project.share_id}`} target="_blank">
                     <ExternalLink className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Preview</span>
                   </Link>
                 </Button>
               )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="cursor-pointer bg-transparent">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href={`/dashboard/projects/${project.id}/edit`}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit project
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="text-destructive cursor-pointer"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete project
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -678,11 +690,11 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
         </div>
       </div>
 
-      {/* Filter Tabs & Main Content */}
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+      {/* Filter Tabs */}
+      <div className="border-b border-border">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
           <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-            <div className="flex items-center gap-1 py-2 min-w-max">
+            <div className="flex items-center gap-1 py-3 min-w-max">
               {[
                 { value: "all", label: "All", count: totalFiles },
                 { value: "pending", label: "Pending", count: pendingCount },
@@ -703,9 +715,14 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
               ))}
             </div>
           </div>
+        </div>
+      </div>
 
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
           {/* File grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-4 sm:mt-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {displayFiles.length === 0 ? (
               <div className="text-center py-16 col-span-full">
                 <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
@@ -733,19 +750,17 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                 const needsChanges = file.status === "needs_changes"
                 const versionCount = file.versions?.length || 1
                 return (
-                  <Card
+                  <div
                     key={file.id}
-                    className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                    className="overflow-hidden rounded-lg border bg-card group cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
                     onClick={() => openReview(index)}
                   >
                     <div className="aspect-square relative bg-muted">
                       {file.file_type === "image" && thumbnailUrl ? (
-                        <Image
+                        <img
                           src={thumbnailUrl || "/placeholder.svg"}
                           alt={file.name}
-                          fill
-                          className="object-cover"
-                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                          className="h-full w-full object-cover"
                         />
                       ) : file.file_type === "video" && thumbnailUrl ? (
                         <div className="relative h-full w-full">
@@ -787,7 +802,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                         <p className="text-xs text-muted-foreground mt-1">{file.feedback.length} feedback</p>
                       )}
                     </div>
-                  </Card>
+                  </div>
                 )
               })
             )}
@@ -964,26 +979,8 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
 
           {/* Content */}
           <div className="flex-1 flex overflow-hidden relative">
-            {/* Left navigation */}
-            <button
-              onClick={() => navigateReview(-1)}
-              disabled={reviewingIndex === 0}
-              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
-            >
-              <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
-            </button>
-
             {/* File viewer */}
             <div className="flex-1 overflow-hidden">{renderFilePreview()}</div>
-
-            {/* Right navigation */}
-            <button
-              onClick={() => navigateReview(1)}
-              disabled={reviewingIndex === displayFiles.length - 1}
-              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors md:right-4"
-            >
-              <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
-            </button>
 
             {/* Sidebar */}
             <div className="hidden md:flex w-72 lg:w-80 border-l border-border flex-col shrink-0 bg-background">
@@ -1157,6 +1154,21 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
               </div>
             </div>
           </div>
+
+          <button
+            onClick={() => navigateReview(-1)}
+            disabled={reviewingIndex === 0}
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          >
+            <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+          <button
+            onClick={() => navigateReview(1)}
+            disabled={reviewingIndex === displayFiles.length - 1}
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          >
+            <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
         </div>
       )}
 
