@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useDropzone } from "react-dropzone"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
-import { Upload, X, FileImage, FileText, FileVideo } from "lucide-react"
+import { Upload, X, FileImage, FileText, FileVideo, CheckCircle2, AlertCircle } from "lucide-react"
 import { uploadToSupabaseStorage, getFileType } from "@/lib/upload-to-supabase"
 
 interface FileUploaderProps {
@@ -41,8 +41,9 @@ const ACCEPTED_TYPES = {
 
 export function FileUploader({ projectId }: FileUploaderProps) {
   const [open, setOpen] = useState(false)
-  const [files, setFiles] = useState<UploadFile[]>([])
-  const [isUploading, setIsUploading] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState<UploadFile[]>([])
+  const [uploadingFiles, setUploadingFiles] = useState<UploadFile[]>([])
+  const isUploadingRef = useRef(false)
   const router = useRouter()
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -51,7 +52,7 @@ export function FileUploader({ projectId }: FileUploaderProps) {
       progress: 0,
       status: "pending" as const,
     }))
-    setFiles((prev) => [...prev, ...newFiles])
+    setPendingFiles((prev) => [...prev, ...newFiles])
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -61,7 +62,7 @@ export function FileUploader({ projectId }: FileUploaderProps) {
   })
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index))
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   const getFileIcon = (mimeType: string) => {
@@ -71,21 +72,25 @@ export function FileUploader({ projectId }: FileUploaderProps) {
   }
 
   const handleUpload = async () => {
-    setIsUploading(true)
+    if (pendingFiles.length === 0) return
 
-    for (let i = 0; i < files.length; i++) {
-      const uploadFile = files[i]
-      if (uploadFile.status !== "pending") continue
+    const filesToUpload = pendingFiles.map((f) => ({ ...f }))
 
-      setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" as const } : f)))
+    isUploadingRef.current = true
+    setUploadingFiles(filesToUpload)
+    setPendingFiles([])
+    setOpen(false)
+
+    for (let i = 0; i < filesToUpload.length; i++) {
+      setUploadingFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" as const } : f)))
 
       try {
-        // Step 1: Upload file directly to Supabase Storage
+        const uploadFile = filesToUpload[i]
         const fileUrl = await uploadToSupabaseStorage(uploadFile.file, projectId, (progress) => {
-          setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, progress: progress.percent } : f)))
+          const percent = typeof progress.percent === "number" && !isNaN(progress.percent) ? progress.percent : 0
+          setUploadingFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, progress: percent } : f)))
         })
 
-        // Step 2: Send only metadata to API to create database records
         const response = await fetch("/api/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -102,9 +107,11 @@ export function FileUploader({ projectId }: FileUploaderProps) {
           throw new Error(errorData.error || "Failed to save file metadata")
         }
 
-        setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "done" as const, progress: 100 } : f)))
+        setUploadingFiles((prev) =>
+          prev.map((f, idx) => (idx === i ? { ...f, status: "done" as const, progress: 100 } : f)),
+        )
       } catch (error) {
-        setFiles((prev) =>
+        setUploadingFiles((prev) =>
           prev.map((f, idx) =>
             idx === i
               ? {
@@ -118,106 +125,142 @@ export function FileUploader({ projectId }: FileUploaderProps) {
       }
     }
 
-    setIsUploading(false)
+    isUploadingRef.current = false
     router.refresh()
 
-    const allDone = files.every((f) => f.status === "done" || f.status === "error")
-    if (allDone) {
-      setTimeout(() => {
-        setOpen(false)
-        setFiles([])
-      }, 1000)
-    }
+    setTimeout(() => {
+      setUploadingFiles([])
+    }, 3000)
   }
 
-  const pendingCount = files.filter((f) => f.status === "pending").length
-  const doneCount = files.filter((f) => f.status === "done").length
+  const dismissUploadStatus = () => {
+    setUploadingFiles([])
+  }
+
+  const pendingCount = pendingFiles.length
+  const doneCount = uploadingFiles.filter((f) => f.status === "done").length
+  const errorCount = uploadingFiles.filter((f) => f.status === "error").length
+  const isUploading = uploadingFiles.some((f) => f.status === "uploading" || f.status === "pending")
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o)
-        if (!o) setFiles([])
-      }}
-    >
-      <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Upload className="h-4 w-4" />
-          Upload
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Upload files</DialogTitle>
-          <DialogDescription>Upload images, PDFs, or videos for your client to review.</DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (!o && !isUploadingRef.current) {
+            setPendingFiles([])
+          }
+          setOpen(o)
+        }}
+      >
+        <DialogTrigger asChild>
+          <Button className="gap-2">
+            <Upload className="h-4 w-4" />
+            Upload
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Upload files</DialogTitle>
+            <DialogDescription>Upload images, PDFs, or videos for your client to review.</DialogDescription>
+          </DialogHeader>
 
-        <div
-          {...getRootProps()}
-          className={`
-            border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
-            ${isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"}
-          `}
-        >
-          <input {...getInputProps()} />
-          <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-          {isDragActive ? (
-            <p className="text-sm">Drop files here...</p>
-          ) : (
-            <>
-              <p className="text-sm font-medium">Drop files here or click to browse</p>
-              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP, GIF, PDF, MP4, WebM, MOV up to 50MB</p>
-            </>
-          )}
-        </div>
+          <div
+            {...getRootProps()}
+            className={`
+              border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+              ${isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"}
+            `}
+          >
+            <input {...getInputProps()} />
+            <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+            {isDragActive ? (
+              <p className="text-sm">Drop files here...</p>
+            ) : (
+              <>
+                <p className="text-sm font-medium">Drop files here or click to browse</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  PNG, JPG, WebP, GIF, PDF, MP4, WebM, MOV up to 50MB
+                </p>
+              </>
+            )}
+          </div>
 
-        {files.length > 0 && (
-          <div className="space-y-2 max-h-60 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            {files.map((uploadFile, index) => {
-              const Icon = getFileIcon(uploadFile.file.type)
-              return (
-                <div key={index} className="flex items-center gap-3 p-2 bg-muted rounded-lg">
-                  <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{uploadFile.file.name}</p>
-                    <div className="flex items-center gap-2">
-                      {uploadFile.status === "uploading" && (
-                        <Progress value={uploadFile.progress} className="h-1 flex-1" />
-                      )}
-                      {uploadFile.status === "done" && <span className="text-xs text-green-600">Uploaded</span>}
-                      {uploadFile.status === "error" && (
-                        <span className="text-xs text-destructive">{uploadFile.error}</span>
-                      )}
-                      {uploadFile.status === "pending" && (
-                        <span className="text-xs text-muted-foreground">
-                          {(uploadFile.file.size / 1024 / 1024).toFixed(1)} MB
-                        </span>
-                      )}
+          {pendingFiles.length > 0 && (
+            <div className="space-y-2 max-h-60 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {pendingFiles.map((uploadFile, index) => {
+                const Icon = getFileIcon(uploadFile.file.type)
+                return (
+                  <div key={index} className="flex items-center gap-3 p-2 bg-muted rounded-lg">
+                    <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{uploadFile.file.name}</p>
+                      <span className="text-xs text-muted-foreground">
+                        {(uploadFile.file.size / 1024 / 1024).toFixed(1)} MB
+                      </span>
                     </div>
-                  </div>
-                  {uploadFile.status === "pending" && (
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeFile(index)}>
                       <X className="h-3 w-3" />
                     </Button>
-                  )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpload} disabled={pendingCount === 0}>
+              Upload {pendingCount} file{pendingCount !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {uploadingFiles.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 w-80 bg-background border rounded-lg shadow-lg overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b bg-muted/50">
+            <span className="text-sm font-medium">
+              {isUploading
+                ? `Uploading ${doneCount}/${uploadingFiles.length}...`
+                : errorCount > 0
+                  ? `${doneCount} uploaded, ${errorCount} failed`
+                  : `${doneCount} file${doneCount !== 1 ? "s" : ""} uploaded`}
+            </span>
+            <Button variant="ghost" size="icon" className="h-6 w-6 cursor-pointer" onClick={dismissUploadStatus}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+          <div className="max-h-60 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            {uploadingFiles.map((uploadFile, index) => {
+              const Icon = getFileIcon(uploadFile.file.type)
+              const progressValue =
+                typeof uploadFile.progress === "number" && !isNaN(uploadFile.progress) ? uploadFile.progress : 0
+              return (
+                <div key={index} className="flex items-center gap-3 p-3 border-b last:border-b-0">
+                  <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{uploadFile.file.name}</p>
+                    {uploadFile.status === "uploading" && (
+                      <>
+                        <Progress value={progressValue} className="h-1 mt-1" />
+                        <span className="text-xs text-muted-foreground">{progressValue}%</span>
+                      </>
+                    )}
+                    {uploadFile.status === "error" && (
+                      <span className="text-xs text-destructive">{uploadFile.error}</span>
+                    )}
+                  </div>
+                  {uploadFile.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />}
+                  {uploadFile.status === "error" && <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />}
                 </div>
               )
             })}
           </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleUpload} disabled={isUploading || pendingCount === 0}>
-            {isUploading
-              ? `Uploading ${doneCount}/${files.length}...`
-              : `Upload ${pendingCount} file${pendingCount !== 1 ? "s" : ""}`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+    </>
   )
 }

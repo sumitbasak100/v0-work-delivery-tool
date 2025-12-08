@@ -1,20 +1,15 @@
 "use client"
 
 import type React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useFileCache } from "@/hooks/use-file-cache"
-import { useState, useEffect, useCallback } from "react"
-import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { FileViewer } from "@/components/ui/file-viewer"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import {
   CheckCircle2,
   FileText,
-  Film,
-  Check,
-  AlertCircle,
   ChevronLeft,
   ChevronRight,
   X,
@@ -22,13 +17,63 @@ import {
   PartyPopper,
   ChevronDown,
   ThumbsUp,
+  MapPin,
+  Trash2,
   Info,
+  Film,
+  Check,
+  AlertCircle,
 } from "lucide-react"
-import type { Project, FileWithVersions } from "@/lib/types"
+import type { Project, FileWithDetails, Feedback } from "@/lib/types"
+import { Document, Page, pdfjs } from "react-pdf"
+import "react-pdf/dist/Page/AnnotationLayer.css"
+import "react-pdf/dist/Page/TextLayer.css"
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+
+type FileWithVersions = FileWithDetails
 
 interface ClientProjectViewProps {
   project: Project
   initialFiles: FileWithVersions[]
+}
+
+function PdfThumbnail({ url }: { url: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full bg-muted">
+        <FileText className="h-10 w-10 text-muted-foreground" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-muted">
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <FileText className="h-10 w-10 text-muted-foreground animate-pulse" />
+        </div>
+      )}
+      <Document
+        file={url}
+        onLoadSuccess={() => setLoaded(true)}
+        onLoadError={() => setError(true)}
+        loading={null}
+        className="flex items-center justify-center h-full"
+      >
+        <Page
+          pageNumber={1}
+          width={200}
+          renderTextLayer={false}
+          renderAnnotationLayer={false}
+          className={loaded ? "opacity-100" : "opacity-0"}
+        />
+      </Document>
+    </div>
+  )
 }
 
 export function ClientProjectView({ project, initialFiles }: ClientProjectViewProps) {
@@ -39,9 +84,22 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
   const [showToast, setShowToast] = useState<{ message: string; type: "success" | "info" } | null>(null)
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null)
   const [isViewingOldVersion, setIsViewingOldVersion] = useState(false)
-  const [cachedFileUrl, setCachedFileUrl] = useState<string | null>(null)
+  const [pendingMarkup, setPendingMarkup] = useState<{
+    x: number
+    y: number
+    timestamp?: number
+    page?: number
+  } | null>(null) // Add page to pendingMarkup type
+  const [markupMode, setMarkupMode] = useState(false)
+  const [highlightedFeedbackId, setHighlightedFeedbackId] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const feedbackInputRef = useRef<HTMLTextAreaElement>(null)
 
   const { getCachedUrl, cacheFile, preloadFile, preloadAllFiles } = useFileCache()
+
+  useEffect(() => {
+    setFiles(initialFiles || [])
+  }, [initialFiles])
 
   useEffect(() => {
     const allFileUrls = files.map((f) => f.current_version?.file_url).filter((url): url is string => !!url)
@@ -49,7 +107,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
     if (allFileUrls.length > 0) {
       preloadAllFiles(allFileUrls)
     }
-  }, []) // Only run once on mount
+  }, [files, preloadAllFiles]) // Depend on files to update preload
 
   useEffect(() => {
     if (selectedFile) {
@@ -65,16 +123,12 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
   useEffect(() => {
     if (selectedFile) {
       setSelectedVersionId(selectedFile.current_version_id)
-    } else {
-      setSelectedVersionId(null)
-    }
-  }, [selectedFile])
-
-  useEffect(() => {
-    if (selectedFile) {
-      setSelectedVersionId(selectedFile.current_version_id)
       setIsViewingOldVersion(false)
       setFeedbackText("")
+      setPendingMarkup(null) // Reset markup when changing files
+      setMarkupMode(false) // Reset markup mode
+    } else {
+      setSelectedVersionId(null)
     }
   }, [selectedFile])
 
@@ -88,6 +142,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
     const fileId = selectedFile.id
     const updatedFiles = files.map((f) => (f.id === fileId ? { ...f, status: "approved" as const } : f))
     setFiles(updatedFiles)
+    setSelectedFile((prev) => (prev ? { ...prev, status: "approved" as const } : null))
     toast("Approved!", "success")
 
     // Find next pending file in the filtered list
@@ -105,6 +160,10 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
     if (nextPendingFile) {
       setSelectedFile(nextPendingFile)
       setSelectedVersionId(nextPendingFile.current_version_id)
+      setIsViewingOldVersion(false)
+      setFeedbackText("")
+      setPendingMarkup(null)
+      setMarkupMode(false)
     } else {
       setSelectedFile(null)
     }
@@ -118,29 +177,59 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
 
   const handleSubmitFeedback = async () => {
     if (!selectedFile || !feedbackText.trim()) return
-    const fileId = selectedFile.id
     const versionId = selectedVersionId || selectedFile.current_version_id
-    const newFeedback = {
+
+    const newFeedback: Feedback = {
       id: crypto.randomUUID(),
-      file_id: fileId,
-      file_version_id: versionId,
+      file_id: selectedFile.id,
+      file_version_id: versionId || null,
       text: feedbackText.trim(),
       created_at: new Date().toISOString(),
+      markup_x: pendingMarkup?.x ?? null,
+      markup_y: pendingMarkup?.y ?? null,
+      markup_timestamp: pendingMarkup?.timestamp ?? null,
+      markup_page: pendingMarkup?.page ?? null,
     }
 
-    const updatedFiles = files.map((f) =>
-      f.id === fileId ? { ...f, status: "needs_changes" as const, feedback: [newFeedback, ...(f.feedback || [])] } : f,
+    const previousFiles = files
+    const previousSelectedFile = selectedFile
+
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === selectedFile.id
+          ? { ...f, status: "needs_changes" as const, feedback: [...(f.feedback || []), newFeedback] }
+          : f,
+      ),
     )
-    setFiles(updatedFiles)
-    setSelectedFile(updatedFiles.find((f) => f.id === fileId) || null)
+    setSelectedFile((prev) =>
+      prev ? { ...prev, status: "needs_changes" as const, feedback: [...(prev.feedback || []), newFeedback] } : null,
+    )
     setFeedbackText("")
+    setPendingMarkup(null)
+    setMarkupMode(false)
     toast("Feedback sent!", "success")
 
-    fetch("/api/addFeedback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: project.id, fileId, versionId, feedbackText: feedbackText.trim() }),
-    }).catch(() => {})
+    try {
+      const res = await fetch("/api/addFeedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          fileId: selectedFile.id,
+          versionId,
+          feedbackText: newFeedback.text,
+          markup_x: newFeedback.markup_x,
+          markup_y: newFeedback.markup_y,
+          markup_timestamp: newFeedback.markup_timestamp,
+          markup_page: newFeedback.markup_page,
+        }),
+      })
+      if (!res.ok) throw new Error("Failed to add feedback")
+    } catch {
+      setFiles(previousFiles)
+      setSelectedFile(previousSelectedFile)
+      toast("Failed to send feedback - please try again", "info")
+    }
   }
 
   const handleFeedbackKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -164,53 +253,21 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
     })
   }, [files, filterStatus])
 
-  const getSelectedVersionUrl = () => {
+  const getSelectedVersion = useCallback(() => {
     if (!selectedFile) return null
-    if (selectedVersionId) {
-      const version = selectedFile.versions?.find((v) => v.id === selectedVersionId)
-      return version?.file_url || selectedFile.current_version?.file_url
-    }
-    return selectedFile.current_version?.file_url
-  }
-
-  const getVersionFeedback = () => {
-    if (!selectedFile) return []
     const versionId = selectedVersionId || selectedFile.current_version_id
-    return selectedFile.feedback?.filter((f) => f.file_version_id === versionId) || []
-  }
+    return selectedFile.versions?.find((v) => v.id === versionId) || selectedFile.current_version || null
+  }, [selectedFile, selectedVersionId])
 
-  const allApproved = files.length > 0 && files.every((f) => f.status === "approved")
-  const pendingCount = files.filter((f) => f.status === "pending").length
-  const approvedCount = files.filter((f) => f.status === "approved").length
+  const getSelectedVersionUrl = useCallback(() => {
+    const version = getSelectedVersion()
+    return version?.file_url || null
+  }, [getSelectedVersion])
 
-  const getCurrentVersionNumber = () => {
-    if (!selectedFile) return 1
-    const versions = selectedFile.versions || []
-    // If we have versions, calculate based on array
-    if (versions.length > 0) {
-      const versionId = selectedVersionId || selectedFile.current_version_id
-      const idx = versions.findIndex((v) => v.id === versionId)
-      if (idx === -1) {
-        // Version not found in array, assume it's the latest
-        return versions.length
-      }
-      return versions.length - idx
-    }
-    // No versions array, default to 1
-    return 1
-  }
-
-  const renderToast = () => {
-    if (!showToast) return null
-    return (
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-foreground text-background px-4 py-2 rounded-full text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2">
-        {showToast.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Info className="h-4 w-4" />}
-        {showToast.message}
-      </div>
-    )
-  }
-
-  const displayFiles = filteredFiles()
+  const cachedFileUrlMemo = useMemo(() => {
+    const url = getSelectedVersionUrl()
+    return url ? getCachedUrl(url) : null
+  }, [getSelectedVersionUrl, getCachedUrl])
 
   useEffect(() => {
     const fileUrl = getSelectedVersionUrl()
@@ -219,6 +276,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
       cacheFile(fileUrl).then(setCachedFileUrl)
 
       // Preload adjacent files
+      const displayFiles = filteredFiles() // Use filteredFiles for context
       const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
       if (currentIndex !== -1 && displayFiles.length > 1) {
         const prevIndex = currentIndex > 0 ? currentIndex - 1 : displayFiles.length - 1
@@ -233,7 +291,127 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
     } else {
       setCachedFileUrl(null)
     }
-  }, [selectedFile, selectedVersionId, displayFiles, cacheFile, preloadFile])
+  }, [selectedFile, selectedVersionId, filteredFiles, cacheFile, preloadFile, getSelectedVersionUrl])
+
+  const getVersionFeedback = useCallback(() => {
+    if (!selectedFile?.feedback) return []
+    const versionId = selectedVersionId || selectedFile.current_version_id
+    return selectedFile.feedback.filter((fb) => fb.file_version_id === versionId)
+  }, [selectedFile, selectedVersionId])
+
+  const getCurrentVersionNumber = useCallback((): number => {
+    if (!selectedFile) return 1
+    const versions = selectedFile.versions || []
+    // If we have versions, calculate based on array
+    if (versions.length > 0) {
+      const versionId = selectedVersionId || selectedFile.current_version_id
+      const idx = versions.findIndex((v) => v.id === versionId)
+      if (idx === -1) {
+        // Version not found in array, assume it's the latest
+        return versions.length
+      }
+      return versions.length - idx
+    }
+    // No versions array, default to 1
+    return 1
+  }, [selectedFile, selectedVersionId])
+
+  const renderToast = () => {
+    if (!showToast) return null
+    return (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-foreground text-background px-4 py-2 rounded-full text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2">
+        {showToast.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+        {showToast.message}
+      </div>
+    )
+  }
+
+  const displayFiles = filteredFiles() // Use filteredFiles for the grid
+
+  const counts = useMemo(
+    () => ({
+      all: files.length,
+      pending: files.filter((f) => f.status === "pending").length,
+      approved: files.filter((f) => f.status === "approved").length,
+      changes: files.filter((f) => f.status === "needs_changes").length,
+    }),
+    [files],
+  )
+
+  const handleMarkupClick = useCallback((x: number, y: number, timestamp?: number, page?: number) => {
+    setPendingMarkup({ x, y, timestamp, page })
+    setTimeout(() => {
+      feedbackInputRef.current?.focus()
+    }, 0)
+  }, [])
+
+  const handleClearMarkup = useCallback(() => {
+    setPendingMarkup(null)
+  }, [])
+
+  const toggleMarkupMode = useCallback(() => {
+    setMarkupMode((prev) => !prev)
+    if (markupMode) {
+      setPendingMarkup(null)
+    }
+  }, [markupMode])
+
+  const handleDeleteFeedback = async (feedbackId: string) => {
+    if (!selectedFile) return
+
+    // Optimistic update
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === selectedFile.id ? { ...f, feedback: (f.feedback || []).filter((fb) => fb.id !== feedbackId) } : f,
+      ),
+    )
+    setSelectedFile((prev) =>
+      prev ? { ...prev, feedback: (prev.feedback || []).filter((fb) => fb.id !== feedbackId) } : null,
+    )
+
+    try {
+      await fetch("/api/deleteFeedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedbackId }),
+      })
+    } catch {
+      // Revert on error - refetch would be better but this is simpler
+      toast("Failed to delete feedback", "info")
+    }
+  }
+
+  const handleFeedbackClick = useCallback(
+    (feedback: Feedback) => {
+      if (!selectedFile) return
+
+      // Highlight the feedback
+      setHighlightedFeedbackId(feedback.id)
+
+      // If video with timestamp, seek to it
+      if (selectedFile.file_type === "video" && feedback.markup_timestamp != null && videoRef.current) {
+        videoRef.current.currentTime = feedback.markup_timestamp
+        videoRef.current.pause()
+      }
+
+      // Clear highlight after a delay
+      setTimeout(() => setHighlightedFeedbackId(null), 3000)
+    },
+    [selectedFile],
+  )
+
+  const [cachedFileUrl, setCachedFileUrl] = useState<string | null>(null)
+
+  if (files.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">{project.name}</h1>
+          <p className="text-muted-foreground">No files to review yet.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -249,11 +427,11 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
             <div>
               <h1 className="font-semibold text-base">{project.name}</h1>
               <p className="text-xs text-muted-foreground">
-                {pendingCount > 0
-                  ? `${pendingCount} files to review`
-                  : allApproved
+                {counts.pending > 0
+                  ? `${counts.pending} files to review`
+                  : counts.approved === files.length && files.length > 0
                     ? "All approved"
-                    : `${approvedCount}/${files.length} approved`}
+                    : `${counts.approved}/${files.length} approved`}
               </p>
             </div>
           </div>
@@ -265,13 +443,13 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
         <div className="max-w-[1280px] mx-auto px-4">
           <div className="flex items-center gap-1 py-2">
             {[
-              { value: "to_review", label: "To Review", count: files.filter((f) => f.status === "pending").length },
-              { value: "all", label: "All", count: files.length },
-              { value: "approved", label: "Approved", count: files.filter((f) => f.status === "approved").length },
+              { value: "to_review", label: "To Review", count: counts.pending },
+              { value: "all", label: "All", count: counts.all },
+              { value: "approved", label: "Approved", count: counts.approved },
               {
                 value: "needs_changes",
                 label: "Changes",
-                count: files.filter((f) => f.status === "needs_changes").length,
+                count: counts.changes,
               },
             ].map((tab) => (
               <button
@@ -293,20 +471,22 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
       {/* File grid */}
       <main className="flex-1 max-w-[1280px] mx-auto w-full px-4 py-8">
         {/* Success state */}
-        {filterStatus === "to_review" && pendingCount === 0 && files.length > 0 && (
+        {filterStatus === "to_review" && counts.pending === 0 && files.length > 0 && (
           <div className="text-center py-20">
             <div className="h-20 w-20 rounded-full bg-green-100 dark:bg-green-950/50 flex items-center justify-center mx-auto mb-6">
-              {allApproved ? (
+              {counts.approved === files.length ? (
                 <PartyPopper className="h-10 w-10 text-green-600" />
               ) : (
                 <CheckCircle2 className="h-10 w-10 text-green-600" />
               )}
             </div>
-            <h3 className="text-2xl font-semibold mb-3">{allApproved ? "All Done!" : "All Reviewed"}</h3>
+            <h3 className="text-2xl font-semibold mb-3">
+              {counts.approved === files.length ? "All Done!" : "All Reviewed"}
+            </h3>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              {allApproved
+              {counts.approved === files.length
                 ? "You've approved all files. Thank you for your review!"
-                : `${approvedCount} approved, ${files.filter((f) => f.status === "needs_changes").length} need changes.`}
+                : `${counts.approved} approved, ${counts.changes} need changes.`}
             </p>
             <Button variant="outline" onClick={() => setFilterStatus("all")} className="cursor-pointer">
               View All Files
@@ -315,7 +495,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
         )}
 
         {/* Empty state */}
-        {displayFiles.length === 0 && !(filterStatus === "to_review" && pendingCount === 0 && files.length > 0) && (
+        {displayFiles.length === 0 && !(filterStatus === "to_review" && counts.pending === 0 && files.length > 0) && (
           <div className="text-center py-20">
             <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
               <FileText className="h-7 w-7 text-muted-foreground" />
@@ -334,19 +514,24 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
               const needsChanges = file.status === "needs_changes"
               const versionCount = file.versions?.length || 1
               return (
-                <Card
+                <div
                   key={file.id}
-                  className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
-                  onClick={() => setSelectedFile(file)}
+                  className="overflow-hidden rounded-lg border bg-card group cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                  onClick={() => {
+                    setSelectedFile(file)
+                    setSelectedVersionId(null)
+                    setIsViewingOldVersion(false)
+                    setPendingMarkup(null)
+                    setMarkupMode(false)
+                    setHighlightedFeedbackId(null)
+                  }}
                 >
                   <div className="aspect-square relative bg-muted">
                     {file.file_type === "image" && thumbnailUrl ? (
-                      <Image
+                      <img
                         src={thumbnailUrl || "/placeholder.svg"}
                         alt={file.name}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                        className="h-full w-full object-cover"
                       />
                     ) : file.file_type === "video" && thumbnailUrl ? (
                       <div className="relative h-full w-full">
@@ -355,6 +540,8 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                           <Film className="h-8 w-8 text-white drop-shadow-lg" />
                         </div>
                       </div>
+                    ) : file.file_type === "pdf" && thumbnailUrl ? (
+                      <PdfThumbnail url={thumbnailUrl} />
                     ) : (
                       <div className="flex items-center justify-center h-full">
                         <FileText className="h-8 w-8 text-muted-foreground" />
@@ -382,8 +569,11 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                   </div>
                   <div className="p-2.5">
                     <p className="text-sm font-medium truncate">{file.name}</p>
+                    {file.feedback && file.feedback.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">{file.feedback.length} feedback</p>
+                    )}
                   </div>
-                </Card>
+                </div>
               )
             })}
           </div>
@@ -398,6 +588,9 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
             <button
               onClick={() => {
                 setSelectedFile(null)
+                setPendingMarkup(null)
+                setMarkupMode(false)
+                setHighlightedFeedbackId(null)
               }}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
@@ -420,7 +613,14 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
               <button
                 onClick={() => {
                   const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
-                  if (currentIndex > 0) setSelectedFile(displayFiles[currentIndex - 1])
+                  if (currentIndex > 0) {
+                    setSelectedFile(displayFiles[currentIndex - 1])
+                    setSelectedVersionId(null)
+                    setIsViewingOldVersion(false)
+                    setPendingMarkup(null)
+                    setMarkupMode(false)
+                    setHighlightedFeedbackId(null)
+                  }
                 }}
                 disabled={displayFiles.findIndex((f) => f.id === selectedFile.id) === 0}
                 className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity"
@@ -430,7 +630,14 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
               <button
                 onClick={() => {
                   const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
-                  if (currentIndex < displayFiles.length - 1) setSelectedFile(displayFiles[currentIndex + 1])
+                  if (currentIndex < displayFiles.length - 1) {
+                    setSelectedFile(displayFiles[currentIndex + 1])
+                    setSelectedVersionId(null)
+                    setIsViewingOldVersion(false)
+                    setPendingMarkup(null)
+                    setMarkupMode(false)
+                    setHighlightedFeedbackId(null)
+                  }
                 }}
                 disabled={displayFiles.findIndex((f) => f.id === selectedFile.id) === displayFiles.length - 1}
                 className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity"
@@ -444,14 +651,23 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                     fileUrl={getSelectedVersionUrl()!}
                     fileName={selectedFile.name}
                     fileType={selectedFile.file_type as "image" | "video" | "pdf"}
-                    cachedUrl={cachedFileUrl}
+                    cachedUrl={cachedFileUrlMemo}
+                    markupMode={markupMode}
+                    pendingMarkup={pendingMarkup}
+                    onMarkupClick={handleMarkupClick}
+                    onClearMarkup={handleClearMarkup}
+                    feedbackWithMarkups={getVersionFeedback()}
+                    onMarkupHover={setHighlightedFeedbackId}
+                    highlightedFeedbackId={highlightedFeedbackId}
+                    videoRef={videoRef}
                   />
                 )}
               </div>
             </div>
 
-            {/* Sidebar - Reduced height of top section */}
+            {/* Sidebar */}
             <div className="w-80 bg-background border-l border-border flex flex-col shrink-0">
+              {/* Sidebar header */}
               <div className="px-4 py-2 border-b border-border shrink-0">
                 <div className="flex items-center gap-2">
                   <h3 className="font-medium truncate flex-1 text-sm">{selectedFile.name}</h3>
@@ -477,6 +693,8 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                         setSelectedVersionId(value)
                         const isOld = value !== selectedFile.current_version_id
                         setIsViewingOldVersion(isOld)
+                        setPendingMarkup(null) // Clear markup when switching versions
+                        setMarkupMode(false) // Reset markup mode
                       }}
                     >
                       <SelectTrigger className="h-auto w-auto gap-0.5 px-2 py-0.5 text-xs text-muted-foreground border-0 bg-transparent shadow-none hover:bg-muted focus:ring-0 [&>svg]:hidden group rounded-full shrink-0">
@@ -496,11 +714,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                         })}
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <span className="text-xs text-muted-foreground px-2 py-0.5 shrink-0">
-                      v{getCurrentVersionNumber()}
-                    </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -516,6 +730,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
 
                     <div className="space-y-2">
                       <Textarea
+                        ref={feedbackInputRef}
                         placeholder="Add feedback... (Enter to send)"
                         value={feedbackText}
                         onChange={(e) => setFeedbackText(e.target.value)}
@@ -528,16 +743,34 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                         rows={2}
                         className="resize-none text-sm"
                       />
-                      <Button
-                        onClick={handleSubmitFeedback}
-                        disabled={!feedbackText.trim()}
-                        size="sm"
-                        variant="outline"
-                        className="w-full cursor-pointer gap-2 bg-transparent"
-                      >
-                        <Send className="h-3 w-3" />
-                        Send Feedback
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={handleSubmitFeedback}
+                          disabled={!feedbackText.trim()}
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 cursor-pointer gap-2 bg-transparent"
+                        >
+                          <Send className="h-3 w-3" />
+                          Send{pendingMarkup ? " with pin" : ""}
+                        </Button>
+                        <Button
+                          variant={markupMode ? "default" : "ghost"}
+                          size="sm"
+                          onClick={toggleMarkupMode}
+                          className={`cursor-pointer px-2 ${markupMode ? "" : "text-muted-foreground"}`}
+                          title={markupMode ? "Click on file to place pin" : "Add markup pin"}
+                        >
+                          <MapPin className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      {pendingMarkup && (
+                        <p className="text-xs text-muted-foreground">
+                          Pin placed
+                          {pendingMarkup.timestamp != null ? ` at ${pendingMarkup.timestamp.toFixed(1)}s` : ""}
+                          {pendingMarkup.page != null ? ` on page ${pendingMarkup.page}` : ""}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -547,12 +780,53 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                 {getVersionFeedback().length > 0 ? (
                   <div className="space-y-3">
                     <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Feedback</h4>
-                    {getVersionFeedback().map((fb) => (
-                      <div key={fb.id} className="bg-muted/50 rounded-lg p-3">
-                        <p className="text-sm">{fb.text}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {new Date(fb.created_at).toLocaleDateString()}
-                        </p>
+                    {getVersionFeedback().map((fb, idx) => (
+                      <div
+                        key={fb.id}
+                        className={`group p-3 rounded-lg border transition-colors cursor-pointer ${
+                          highlightedFeedbackId === fb.id
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-muted-foreground/30"
+                        }`}
+                        onClick={() => handleFeedbackClick(fb)}
+                        onMouseEnter={() => fb.markup_x != null && setHighlightedFeedbackId(fb.id)}
+                        onMouseLeave={() => setHighlightedFeedbackId(null)}
+                      >
+                        <div className="flex items-start gap-2">
+                          {fb.markup_x != null && (
+                            <span className="shrink-0 w-5 h-5 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center font-medium">
+                              {getVersionFeedback()
+                                .filter((f) => f.markup_x != null)
+                                .indexOf(fb) + 1}
+                            </span>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm">{fb.text}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(fb.created_at).toLocaleDateString()}
+                              </p>
+                              {fb.markup_timestamp != null && (
+                                <span className="text-xs text-muted-foreground">
+                                  @ {fb.markup_timestamp.toFixed(1)}s
+                                </span>
+                              )}
+                              {fb.markup_page != null && (
+                                <span className="text-xs text-muted-foreground">on page {fb.markup_page}</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteFeedback(fb.id)
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive transition-opacity"
+                            title="Delete feedback"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -563,34 +837,47 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                 )}
               </div>
 
-              {/* Bottom thumbnails */}
-              <div className="border-t border-border p-3 shrink-0">
-                <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {/* Bottom thumbnails quick navigation */}
+              <div className="p-3 border-t border-border shrink-0">
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   {displayFiles.map((file) => {
-                    const isActive = file.id === selectedFile.id
+                    const thumbUrl = file.current_version?.file_url
+                    const isActive = file.id === selectedFile?.id
+                    const isApproved = file.status === "approved"
                     return (
                       <button
                         key={file.id}
-                        onClick={() => setSelectedFile(file)}
-                        className={`shrink-0 w-12 h-12 rounded-md overflow-hidden border-2 transition-colors cursor-pointer ${
-                          isActive ? "border-primary" : "border-transparent hover:border-muted-foreground/50"
+                        onClick={() => {
+                          setSelectedFile(file)
+                          setSelectedVersionId(null)
+                          setIsViewingOldVersion(false)
+                          setPendingMarkup(null)
+                          setMarkupMode(false)
+                          setHighlightedFeedbackId(null)
+                        }}
+                        className={`relative h-12 w-12 rounded-md overflow-hidden shrink-0 cursor-pointer transition-all ${
+                          isActive ? "ring-2 ring-primary" : "opacity-60 hover:opacity-100"
                         }`}
                       >
-                        {file.file_type === "image" && file.current_version?.file_url ? (
-                          <Image
-                            src={file.current_version.file_url || "/placeholder.svg"}
-                            alt={file.name}
-                            width={48}
-                            height={48}
-                            className="object-cover w-full h-full"
-                          />
+                        {file.file_type === "image" && thumbUrl ? (
+                          <img src={thumbUrl || "/placeholder.svg"} alt="" className="h-full w-full object-cover" />
+                        ) : file.file_type === "video" && thumbUrl ? (
+                          <div className="relative h-full w-full">
+                            <video src={thumbUrl} className="h-full w-full object-cover" muted />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Film className="h-6 w-6 text-white drop-shadow-lg" />
+                            </div>
+                          </div>
+                        ) : file.file_type === "pdf" && thumbUrl ? (
+                          <PdfThumbnail url={thumbUrl} />
                         ) : (
-                          <div className="w-full h-full bg-muted flex items-center justify-center">
-                            {file.file_type === "video" ? (
-                              <Film className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <FileText className="h-4 w-4 text-muted-foreground" />
-                            )}
+                          <div className="h-full w-full bg-muted flex items-center justify-center">
+                            <FileText className="h-4 w-4" />
+                          </div>
+                        )}
+                        {isApproved && (
+                          <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center">
+                            <Check className="h-4 w-4 text-white" />
                           </div>
                         )}
                       </button>

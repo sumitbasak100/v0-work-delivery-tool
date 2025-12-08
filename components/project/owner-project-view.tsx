@@ -68,6 +68,49 @@ import JSZip from "jszip"
 import { FileViewer } from "@/components/ui/file-viewer"
 import { uploadToSupabaseStorage, getFileType } from "@/lib/upload-to-supabase"
 import { useFileCache } from "@/hooks/use-file-cache"
+import { Document, Page, pdfjs } from "react-pdf"
+import "react-pdf/dist/Page/AnnotationLayer.css"
+import "react-pdf/dist/Page/TextLayer.css"
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+
+function PdfThumbnail({ url }: { url: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full bg-muted">
+        <FileText className="h-10 w-10 text-muted-foreground" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-muted">
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <FileText className="h-10 w-10 text-muted-foreground animate-pulse" />
+        </div>
+      )}
+      <Document
+        file={url}
+        onLoadSuccess={() => setLoaded(true)}
+        onLoadError={() => setError(true)}
+        loading={null}
+        className="flex items-center justify-center h-full"
+      >
+        <Page
+          pageNumber={1}
+          width={200}
+          renderTextLayer={false}
+          renderAnnotationLayer={false}
+          className={loaded ? "opacity-100" : "opacity-0"}
+        />
+      </Document>
+    </div>
+  )
+}
 
 interface OwnerProjectViewProps {
   project: Project
@@ -122,6 +165,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
   const [showUploadVersionDialog, setShowUploadVersionDialog] = useState(false)
   const [versionUploadFile, setVersionUploadFile] = useState<File | null>(null)
   const [versionUploadStatus, setVersionUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle")
+  const [highlightedFeedbackId, setHighlightedFeedbackId] = useState<string | null>(null)
   // const supabase = createClient() // removed as it causes Failed to fetch errors in preview
 
   const { getCachedUrl, cacheFile, preloadFile, preloadAllFiles } = useFileCache()
@@ -233,17 +277,20 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
 
   const openReview = useCallback((index: number) => {
     setReviewingIndex(index)
+    setHighlightedFeedbackId(null) // Reset highlighted feedback when opening review
   }, [])
 
   const closeReview = useCallback(() => {
     setReviewingIndex(null)
     setSelectedVersionId(null)
+    setHighlightedFeedbackId(null) // Reset highlighted feedback when closing review
   }, [])
 
   const navigateToPrev = useCallback(() => {
     if (hasPrev && reviewingIndex !== null) {
       setReviewingIndex(reviewingIndex - 1)
       setSelectedVersionId(null)
+      setHighlightedFeedbackId(null) // Reset highlighted feedback when navigating
     }
   }, [hasPrev, reviewingIndex])
 
@@ -251,6 +298,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
     if (hasNext && reviewingIndex !== null) {
       setReviewingIndex(reviewingIndex + 1)
       setSelectedVersionId(null)
+      setHighlightedFeedbackId(null) // Reset highlighted feedback when navigating
     }
   }, [hasNext, reviewingIndex])
 
@@ -529,6 +577,9 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
         fileName={currentFile.name}
         fileType={currentFile.file_type}
         cachedUrl={cachedFileUrl}
+        feedbackWithMarkups={versionFeedback}
+        onMarkupHover={setHighlightedFeedbackId}
+        highlightedFeedbackId={highlightedFeedbackId}
       />
     )
   }
@@ -747,6 +798,8 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                           <Film className="h-8 w-8 text-white drop-shadow-lg" />
                         </div>
                       </div>
+                    ) : file.file_type === "pdf" && thumbnailUrl ? (
+                      <PdfThumbnail url={thumbnailUrl} />
                     ) : (
                       <div className="flex items-center justify-center h-full">
                         <FileText className="h-8 w-8 text-muted-foreground" />
@@ -1019,11 +1072,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                         })}
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <span className="text-xs text-muted-foreground px-2 py-0.5 shrink-0">
-                      v{currentFileVersions.length || 1}
-                    </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -1065,8 +1114,23 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                     </h4>
                     {versionFeedback.length > 0 ? (
                       <div className="space-y-3">
-                        {versionFeedback.map((fb) => (
-                          <div key={fb.id} className="bg-muted rounded-lg p-3">
+                        {versionFeedback.map((fb, idx) => (
+                          <div
+                            key={fb.id}
+                            className={`bg-muted rounded-lg p-3 transition-colors ${
+                              highlightedFeedbackId === fb.id ? "ring-2 ring-primary/50 bg-primary/5" : ""
+                            }`}
+                            onMouseEnter={() => setHighlightedFeedbackId(fb.id)}
+                            onMouseLeave={() => setHighlightedFeedbackId(null)}
+                          >
+                            {fb.markup_x != null && fb.markup_y != null && (
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center">
+                                  {versionFeedback.filter((f) => f.markup_x != null).indexOf(fb) + 1}
+                                </span>
+                                <span className="text-xs text-muted-foreground">Markup feedback</span>
+                              </div>
+                            )}
                             <p className="text-sm">{fb.text}</p>
                             <p className="text-xs text-muted-foreground mt-2">
                               {formatDistanceToNow(new Date(fb.created_at), { addSuffix: true })}
@@ -1104,13 +1168,19 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                             className="object-cover"
                             sizes="48px"
                           />
+                        ) : file.file_type === "video" && thumbUrl ? (
+                          <div className="relative h-full w-full">
+                            <video src={thumbUrl} className="h-full w-full object-cover" muted />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Film className="h-6 w-6 text-white drop-shadow-lg" />
+                            </div>
+                          </div>
+                        ) : file.file_type === "pdf" && thumbUrl ? (
+                          // Use PdfThumbnail for PDF previews
+                          <PdfThumbnail url={thumbUrl} />
                         ) : (
                           <div className="h-full w-full bg-muted flex items-center justify-center">
-                            {file.file_type === "video" ? (
-                              <Film className="h-4 w-4" />
-                            ) : (
-                              <FileText className="h-4 w-4" />
-                            )}
+                            <FileText className="h-4 w-4" />
                           </div>
                         )}
                         {isApproved && (

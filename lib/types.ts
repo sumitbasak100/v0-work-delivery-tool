@@ -44,6 +44,10 @@ export interface Feedback {
   file_version_id: string | null
   text: string
   created_at: string
+  markup_x?: number | null
+  markup_y?: number | null
+  markup_timestamp?: number | null
+  markup_page?: number | null // Add markup_page field for PDF page markups
 }
 
 export interface ProjectWithStats extends Project {

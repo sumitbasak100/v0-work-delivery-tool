@@ -29,17 +29,15 @@ export function ProjectsList({ projects }: ProjectsListProps) {
 
   if (projects.length === 0) {
     return (
-      <Card className="border-dashed border-2">
-        <CardContent className="flex flex-col items-center justify-center py-20">
-          <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-4">
-            <FolderOpen className="h-7 w-7 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold mb-2">No projects yet</h3>
-          <p className="text-sm text-muted-foreground text-center max-w-sm">
-            Create your first project to start delivering work to your clients.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-4">
+          <FolderOpen className="h-7 w-7 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold mb-2">No projects yet</h3>
+        <p className="text-sm text-muted-foreground text-center max-w-sm">
+          Create your first project to start delivering work to your clients.
+        </p>
+      </div>
     )
   }
 

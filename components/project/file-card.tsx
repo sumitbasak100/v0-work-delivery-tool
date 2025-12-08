@@ -1,12 +1,54 @@
 "use client"
 
+import { useState } from "react"
 import Image from "next/image"
 import { Card, CardContent } from "@/components/ui/card"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { ReplaceFileDialog } from "@/components/project/replace-file-dialog"
 import { DeleteFileDialog } from "@/components/project/delete-file-dialog"
 import { FileText, Film, ImageIcon } from "lucide-react"
+import { Document, Page, pdfjs } from "react-pdf"
 import type { FileWithDetails } from "@/lib/types"
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+
+function PdfThumbnail({ url }: { url: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full bg-muted">
+        <FileText className="h-10 w-10 text-muted-foreground" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-muted">
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <FileText className="h-10 w-10 text-muted-foreground animate-pulse" />
+        </div>
+      )}
+      <Document
+        file={url}
+        onLoadSuccess={() => setLoaded(true)}
+        onLoadError={() => setError(true)}
+        loading={null}
+        className="flex items-center justify-center h-full"
+      >
+        <Page
+          pageNumber={1}
+          width={200}
+          renderTextLayer={false}
+          renderAnnotationLayer={false}
+          className={loaded ? "opacity-100" : "opacity-0"}
+        />
+      </Document>
+    </div>
+  )
+}
 
 interface FileCardProps {
   file: FileWithDetails
@@ -40,6 +82,10 @@ export function FileCard({ file, onClick, isOwner = false }: FileCardProps) {
           </div>
         </div>
       )
+    }
+
+    if (file.file_type === "pdf" && thumbnailUrl) {
+      return <PdfThumbnail url={thumbnailUrl} />
     }
 
     if (file.file_type === "pdf") {
