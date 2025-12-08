@@ -23,6 +23,7 @@ import {
   Film,
   Check,
   AlertCircle,
+  MessageSquare,
 } from "lucide-react"
 import type { Project, FileWithDetails, Feedback } from "@/lib/types"
 import { Document, Page, pdfjs } from "react-pdf"
@@ -830,9 +831,25 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                       </div>
                     ))}
                   </div>
+                ) : selectedFile?.status === "approved" ? (
+                  <div className="flex flex-col items-center justify-center py-12 px-4">
+                    <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
+                      <Check className="h-6 w-6 text-emerald-500" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground mb-1">File Approved</p>
+                    <p className="text-xs text-muted-foreground text-center max-w-[200px]">
+                      This file has been approved and is ready for delivery.
+                    </p>
+                  </div>
                 ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-muted-foreground">No feedback yet</p>
+                  <div className="flex flex-col items-center justify-center py-12 px-4">
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <MessageSquare className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground mb-1">No feedback yet</p>
+                    <p className="text-xs text-muted-foreground text-center max-w-[200px]">
+                      Click anywhere on the file to add a markup, or type below to leave general feedback.
+                    </p>
                   </div>
                 )}
               </div>
