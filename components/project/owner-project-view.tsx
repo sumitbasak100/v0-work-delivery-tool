@@ -9,13 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,8 +45,6 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  Eye,
-  EyeOff,
   ArrowLeft,
   Copy,
   Plus,
@@ -286,33 +278,27 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
     setHighlightedFeedbackId(null) // Reset highlighted feedback when closing review
   }, [])
 
-  const navigateToPrev = useCallback(() => {
-    if (hasPrev && reviewingIndex !== null) {
-      setReviewingIndex(reviewingIndex - 1)
-      setSelectedVersionId(null)
-      setHighlightedFeedbackId(null) // Reset highlighted feedback when navigating
-    }
-  }, [hasPrev, reviewingIndex])
+  const navigateReview = useCallback(
+    (direction: number) => {
+      if (reviewingIndex === null) return
 
-  const navigateToNext = useCallback(() => {
-    if (hasNext && reviewingIndex !== null) {
-      setReviewingIndex(reviewingIndex + 1)
-      setSelectedVersionId(null)
-      setHighlightedFeedbackId(null) // Reset highlighted feedback when navigating
-    }
-  }, [hasNext, reviewingIndex])
+      let newIndex = reviewingIndex + direction
 
-  useEffect(() => {
-    if (reviewingIndex === null) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
-      if (e.key === "ArrowLeft") navigateToPrev()
-      if (e.key === "ArrowRight") navigateToNext()
-      if (e.key === "Escape") closeReview()
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [reviewingIndex, navigateToPrev, navigateToNext, closeReview])
+      // Wrap around if reaching the ends
+      if (newIndex < 0) {
+        newIndex = displayFiles.length - 1
+      } else if (newIndex >= displayFiles.length) {
+        newIndex = 0
+      }
+
+      if (newIndex >= 0 && newIndex < displayFiles.length) {
+        setReviewingIndex(newIndex)
+        setSelectedVersionId(null)
+        setHighlightedFeedbackId(null) // Reset highlighted feedback when navigating
+      }
+    },
+    [reviewingIndex, displayFiles.length],
+  )
 
   const handleToggleActive = async () => {
     // const { data, error } = await supabase
@@ -594,102 +580,73 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
         </div>
       )}
 
-      {/* Header - full width background, constrained content */}
-      <header className="border-b border-border">
-        <div className="max-w-[1280px] mx-auto px-4 py-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-            <Link href="/dashboard" className="flex items-center gap-1 hover:text-foreground transition-colors">
-              <ArrowLeft className="h-4 w-4" />
-              Projects
-            </Link>
-          </div>
-
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">{project.name}</h1>
-                <Badge variant={project.is_active ? "default" : "secondary"}>
-                  {project.is_active ? "Active" : "Inactive"}
+      {/* Header */}
+      <header className="border-b border-border bg-card shrink-0">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-sm shrink-0"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Back</span>
+              </Link>
+              <h1 className="text-lg sm:text-xl font-semibold truncate">{project.name}</h1>
+              {!project.is_active && (
+                <Badge variant="secondary" className="shrink-0 text-xs">
+                  Inactive
                 </Badge>
-              </div>
-              {project.description && <p className="text-muted-foreground">{project.description}</p>}
+              )}
             </div>
-
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:ml-auto">
               <Button
                 variant="outline"
-                className="gap-2 bg-transparent cursor-pointer"
+                size="sm"
+                className="gap-1.5 cursor-pointer flex-1 sm:flex-none bg-transparent"
+                onClick={handleDownloadAll}
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Download</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 cursor-pointer flex-1 sm:flex-none bg-transparent"
                 onClick={() => setShowShareDialog(true)}
               >
-                <Share2 className="h-4 w-4" />
-                Share
+                <Share2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Share</span>
               </Button>
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/p/${project.share_id}`} target="_blank" className="gap-2">
-                  <Eye className="h-4 w-4" />
-                  Preview
+              <Button variant="outline" size="sm" asChild className="flex-1 sm:flex-none bg-transparent">
+                <Link href={`/dashboard/projects/${project.id}/edit`} className="gap-1.5 cursor-pointer">
+                  <Pencil className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Edit</span>
                 </Link>
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="cursor-pointer bg-transparent">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleDownloadAll} className="cursor-pointer">
-                    <Download className="mr-2 h-4 w-4" />
-                    Download all files
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="cursor-pointer bg-transparent">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => router.push(`/dashboard/projects/${project.id}/edit`)}
-                    className="cursor-pointer"
-                  >
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit project
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleToggleActive} className="cursor-pointer">
-                    {project.is_active ? (
-                      <>
-                        <EyeOff className="mr-2 h-4 w-4" />
-                        Deactivate link
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="mr-2 h-4 w-4" />
-                        Activate link
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setShowDeleteDialog(true)}
-                    className="text-destructive cursor-pointer"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete project
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {project.share_id && project.is_active && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  className="gap-1.5 cursor-pointer flex-1 sm:flex-none bg-transparent"
+                >
+                  <Link href={`/p/${project.share_id}`} target="_blank">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Preview</span>
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </header>
 
-      {/* Progress bar */}
-      <div className="border-b border-border">
-        <div className="max-w-[1280px] mx-auto px-4 py-4">
+      {/* Stats bar */}
+      <div className="border-b border-border bg-muted/30">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-green-500" />
                 <span className="text-sm">{approvedCount} approved</span>
@@ -712,7 +669,7 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                 <span className="text-sm text-muted-foreground">{progress}%</span>
                 <Progress value={progress} className="w-24 h-2" />
               </div>
-              <Button onClick={() => setShowUploadPanel(true)} className="gap-2 cursor-pointer">
+              <Button onClick={() => setShowUploadPanel(true)} size="sm" className="gap-2 cursor-pointer">
                 <Upload className="h-4 w-4" />
                 Upload Files
               </Button>
@@ -721,121 +678,121 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="border-b border-border">
-        <div className="max-w-[1280px] mx-auto px-4">
-          <div className="flex items-center gap-1 py-2">
-            {[
-              { value: "all", label: "All", count: totalFiles },
-              { value: "pending", label: "Pending", count: pendingCount },
-              { value: "approved", label: "Approved", count: approvedCount },
-              { value: "needs_changes", label: "Needs Changes", count: needsChangesCount },
-            ].map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => setFilterStatus(tab.value as FilterStatus)}
-                className={`px-3 py-2 text-sm rounded-md transition-colors cursor-pointer ${
-                  filterStatus === tab.value
-                    ? "bg-foreground text-background font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                {tab.label} ({tab.count})
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* File grid */}
-      <main className="max-w-[1280px] mx-auto px-4 py-8">
-        {displayFiles.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-              <Upload className="h-8 w-8 text-muted-foreground" />
+      {/* Filter Tabs & Main Content */}
+      <main className="flex-1 overflow-auto">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div className="flex items-center gap-1 py-2 min-w-max">
+              {[
+                { value: "all", label: "All", count: totalFiles },
+                { value: "pending", label: "Pending", count: pendingCount },
+                { value: "approved", label: "Approved", count: approvedCount },
+                { value: "needs_changes", label: "Needs Changes", count: needsChangesCount },
+              ].map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setFilterStatus(tab.value as FilterStatus)}
+                  className={`px-3 py-2 text-sm rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                    filterStatus === tab.value
+                      ? "bg-foreground text-background font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </button>
+              ))}
             </div>
-            <h3 className="text-lg font-medium mb-2">
-              {filterStatus === "all" ? "No files yet" : `No ${filterStatus.replace("_", " ")} files`}
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              {filterStatus === "all"
-                ? "Upload files to share with your client for review."
-                : "Files with this status will appear here."}
-            </p>
-            {filterStatus === "all" && (
-              <Button onClick={() => setShowUploadPanel(true)} className="gap-2 cursor-pointer">
-                <Upload className="h-4 w-4" />
-                Upload Files
-              </Button>
+          </div>
+
+          {/* File grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-4 sm:mt-6">
+            {displayFiles.length === 0 ? (
+              <div className="text-center py-16 col-span-full">
+                <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                  <Upload className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium mb-2">
+                  {filterStatus === "all" ? "No files yet" : `No ${filterStatus.replace("_", " ")} files`}
+                </h3>
+                <p className="text-muted-foreground mb-4">
+                  {filterStatus === "all"
+                    ? "Upload files to share with your client for review."
+                    : "Files with this status will appear here."}
+                </p>
+                {filterStatus === "all" && (
+                  <Button onClick={() => setShowUploadPanel(true)} className="gap-2 cursor-pointer">
+                    <Upload className="h-4 w-4" />
+                    Upload Files
+                  </Button>
+                )}
+              </div>
+            ) : (
+              displayFiles.map((file, index) => {
+                const thumbnailUrl = file.current_version?.file_url
+                const isApproved = file.status === "approved"
+                const needsChanges = file.status === "needs_changes"
+                const versionCount = file.versions?.length || 1
+                return (
+                  <Card
+                    key={file.id}
+                    className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                    onClick={() => openReview(index)}
+                  >
+                    <div className="aspect-square relative bg-muted">
+                      {file.file_type === "image" && thumbnailUrl ? (
+                        <Image
+                          src={thumbnailUrl || "/placeholder.svg"}
+                          alt={file.name}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                        />
+                      ) : file.file_type === "video" && thumbnailUrl ? (
+                        <div className="relative h-full w-full">
+                          <video src={thumbnailUrl} className="h-full w-full object-cover" muted />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Film className="h-8 w-8 text-white drop-shadow-lg" />
+                          </div>
+                        </div>
+                      ) : file.file_type === "pdf" && thumbnailUrl ? (
+                        <PdfThumbnail url={thumbnailUrl} />
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <FileText className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                      )}
+                      {isApproved && (
+                        <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                          <div className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center">
+                            <Check className="h-6 w-6 text-white" />
+                          </div>
+                        </div>
+                      )}
+                      {needsChanges && (
+                        <div className="absolute top-2 right-2">
+                          <div className="h-6 w-6 rounded-full bg-amber-500 flex items-center justify-center">
+                            <AlertCircle className="h-4 w-4 text-white" />
+                          </div>
+                        </div>
+                      )}
+                      {versionCount > 1 && (
+                        <div className="absolute bottom-2 right-2 bg-background/80 backdrop-blur text-xs px-2 py-1 rounded-full font-medium">
+                          v{versionCount}
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2.5">
+                      <p className="text-sm font-medium truncate">{file.name}</p>
+                      {file.feedback && file.feedback.length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">{file.feedback.length} feedback</p>
+                      )}
+                    </div>
+                  </Card>
+                )
+              })
             )}
           </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {displayFiles.map((file, index) => {
-              const thumbnailUrl = file.current_version?.file_url
-              const isApproved = file.status === "approved"
-              const needsChanges = file.status === "needs_changes"
-              const versionCount = file.versions?.length || 1
-              return (
-                <Card
-                  key={file.id}
-                  className="overflow-hidden group cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
-                  onClick={() => openReview(index)}
-                >
-                  <div className="aspect-square relative bg-muted">
-                    {file.file_type === "image" && thumbnailUrl ? (
-                      <Image
-                        src={thumbnailUrl || "/placeholder.svg"}
-                        alt={file.name}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                      />
-                    ) : file.file_type === "video" && thumbnailUrl ? (
-                      <div className="relative h-full w-full">
-                        <video src={thumbnailUrl} className="h-full w-full object-cover" muted />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Film className="h-8 w-8 text-white drop-shadow-lg" />
-                        </div>
-                      </div>
-                    ) : file.file_type === "pdf" && thumbnailUrl ? (
-                      <PdfThumbnail url={thumbnailUrl} />
-                    ) : (
-                      <div className="flex items-center justify-center h-full">
-                        <FileText className="h-8 w-8 text-muted-foreground" />
-                      </div>
-                    )}
-                    {isApproved && (
-                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
-                        <div className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center">
-                          <Check className="h-6 w-6 text-white" />
-                        </div>
-                      </div>
-                    )}
-                    {needsChanges && (
-                      <div className="absolute top-2 right-2">
-                        <div className="h-6 w-6 rounded-full bg-amber-500 flex items-center justify-center">
-                          <AlertCircle className="h-4 w-4 text-white" />
-                        </div>
-                      </div>
-                    )}
-                    {versionCount > 1 && (
-                      <div className="absolute bottom-2 right-2 bg-background/80 backdrop-blur text-xs px-2 py-1 rounded-full font-medium">
-                        v{versionCount}
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-2.5">
-                    <p className="text-sm font-medium truncate">{file.name}</p>
-                    {file.feedback && file.feedback.length > 0 && (
-                      <p className="text-xs text-muted-foreground mt-1">{file.feedback.length} feedback</p>
-                    )}
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-        )}
+        </div>
       </main>
 
       {/* Upload panel overlay */}
@@ -952,20 +909,20 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
       {reviewingIndex !== null && currentFile && (
         <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden" style={{ overflow: "hidden" }}>
           {/* Top bar */}
-          <header className="h-14 border-b border-border flex items-center justify-between px-4 shrink-0">
+          <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0 bg-background gap-3 sm:gap-4">
             <button
               onClick={closeReview}
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              className="flex items-center gap-1 sm:gap-2 text-muted-foreground hover:text-foreground cursor-pointer"
             >
               <X className="h-5 w-5" />
-              <span className="text-sm hidden sm:inline">Back to files</span>
+              <span className="text-sm hidden sm:inline">Close</span>
             </button>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-xs sm:text-sm font-medium">
                 {reviewingIndex + 1} of {displayFiles.length}
               </span>
               {isViewingOldVersion && (
-                <Badge variant="outline" className="border-amber-500 text-amber-600">
+                <Badge variant="outline" className="border-amber-500 text-amber-600 text-xs sm:text-sm">
                   Viewing old version
                 </Badge>
               )}
@@ -975,15 +932,20 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2 cursor-pointer bg-transparent"
+                  className="gap-1.5 cursor-pointer bg-transparent h-8 w-8 sm:h-auto sm:w-auto"
                   onClick={() => handleDownloadFile(currentFileUrl, currentFile.name)}
                 >
                   <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Download</span>
                 </Button>
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="cursor-pointer bg-transparent">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="cursor-pointer bg-transparent h-8 w-8 sm:h-auto sm:w-auto"
+                  >
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -1000,31 +962,31 @@ export function OwnerProjectView({ project: initialProject, files: initialFiles 
             </div>
           </header>
 
-          {/* Main content */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* File preview area */}
-            <div className="flex-1 relative bg-muted/30 flex flex-col overflow-hidden">
-              {/* Navigation */}
-              <button
-                onClick={navigateToPrev}
-                disabled={!hasPrev}
-                className="absolute left-2 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <ChevronLeft className="h-6 w-6" />
-              </button>
-              <button
-                onClick={navigateToNext}
-                disabled={!hasNext}
-                className="absolute right-2 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <ChevronRight className="h-6 w-6" />
-              </button>
+          {/* Content */}
+          <div className="flex-1 flex overflow-hidden relative">
+            {/* Left navigation */}
+            <button
+              onClick={() => navigateReview(-1)}
+              disabled={reviewingIndex === 0}
+              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
+            </button>
 
-              <div className="flex-1 overflow-hidden">{renderFilePreview()}</div>
-            </div>
+            {/* File viewer */}
+            <div className="flex-1 overflow-hidden">{renderFilePreview()}</div>
+
+            {/* Right navigation */}
+            <button
+              onClick={() => navigateReview(1)}
+              disabled={reviewingIndex === displayFiles.length - 1}
+              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors md:right-4"
+            >
+              <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
+            </button>
 
             {/* Sidebar */}
-            <div className="w-80 bg-background border-l border-border flex flex-col shrink-0">
+            <div className="hidden md:flex w-72 lg:w-80 border-l border-border flex-col shrink-0 bg-background">
               {/* File info - Reduced height, combined into single line */}
               <div className="px-4 py-2 border-b border-border shrink-0">
                 <div className="flex items-center gap-2">

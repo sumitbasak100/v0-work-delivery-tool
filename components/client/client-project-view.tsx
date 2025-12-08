@@ -95,6 +95,7 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
   const [highlightedFeedbackId, setHighlightedFeedbackId] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const feedbackInputRef = useRef<HTMLTextAreaElement>(null)
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false)
 
   const { getCachedUrl, cacheFile, preloadFile, preloadAllFiles } = useFileCache()
 
@@ -401,6 +402,25 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
     [selectedFile],
   )
 
+  const navigateFile = useCallback(
+    (direction: number) => {
+      if (!selectedFile) return
+
+      const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
+      const newIndex = currentIndex + direction
+
+      if (newIndex >= 0 && newIndex < displayFiles.length) {
+        setSelectedFile(displayFiles[newIndex])
+        setSelectedVersionId(null)
+        setIsViewingOldVersion(false)
+        setPendingMarkup(null)
+        setMarkupMode(false)
+        setHighlightedFeedbackId(null)
+      }
+    },
+    [selectedFile, displayFiles],
+  )
+
   const [cachedFileUrl, setCachedFileUrl] = useState<string | null>(null)
 
   if (files.length === 0) {
@@ -414,35 +434,39 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
     )
   }
 
+  const approvedCount = counts.approved
+  const totalFiles = counts.all
+  const allApproved = approvedCount === totalFiles
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {renderToast()}
 
       {/* Header */}
-      <header className="border-b border-border bg-card sticky top-0 z-40">
-        <div className="max-w-[1280px] mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <FileText className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="font-semibold text-base">{project.name}</h1>
-              <p className="text-xs text-muted-foreground">
-                {counts.pending > 0
-                  ? `${counts.pending} files to review`
-                  : counts.approved === files.length && files.length > 0
-                    ? "All approved"
-                    : `${counts.approved}/${files.length} approved`}
-              </p>
-            </div>
+      <header className="border-b border-border bg-card shrink-0">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+          <h1 className="text-lg sm:text-xl font-semibold truncate">{project.name}</h1>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <span className="text-xs sm:text-sm text-muted-foreground hidden sm:inline">
+              {approvedCount} of {totalFiles} approved
+            </span>
+            <span className="text-xs text-muted-foreground sm:hidden">
+              {approvedCount}/{totalFiles}
+            </span>
+            {allApproved && files.length > 0 && (
+              <span className="text-green-500 flex items-center gap-1 text-xs sm:text-sm">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Complete</span>
+              </span>
+            )}
           </div>
         </div>
       </header>
 
       {/* Filter tabs */}
-      <div className="border-b border-border bg-background">
+      <div className="border-b border-border overflow-x-auto">
         <div className="max-w-[1280px] mx-auto px-4">
-          <div className="flex items-center gap-1 py-2">
+          <div className="flex items-center gap-1 py-2 min-w-max">
             {[
               { value: "to_review", label: "To Review", count: counts.pending },
               { value: "all", label: "All", count: counts.all },
@@ -469,8 +493,8 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
         </div>
       </div>
 
-      {/* File grid */}
-      <main className="flex-1 max-w-[1280px] mx-auto w-full px-4 py-8">
+      {/* Main content */}
+      <main className="max-w-[1280px] mx-auto px-4 py-6 sm:py-8">
         {/* Success state */}
         {filterStatus === "to_review" && counts.pending === 0 && files.length > 0 && (
           <div className="text-center py-20">
@@ -584,8 +608,8 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
       {/* Review overlay */}
       {selectedFile && (
         <div className="fixed inset-0 bg-background z-50 flex flex-col">
-          {/* Top bar - Remove version from header */}
-          <header className="h-14 border-b border-border flex items-center justify-between px-4 shrink-0 bg-background">
+          {/* Top bar */}
+          <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0 bg-background">
             <button
               onClick={() => {
                 setSelectedFile(null)
@@ -593,57 +617,48 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
                 setMarkupMode(false)
                 setHighlightedFeedbackId(null)
               }}
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              className="flex items-center gap-1 sm:gap-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               <X className="h-5 w-5" />
               <span className="text-sm hidden sm:inline">Close</span>
             </button>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-xs sm:text-sm text-muted-foreground">
                 {displayFiles.findIndex((f) => f.id === selectedFile.id) + 1} of {displayFiles.length}
               </span>
             </div>
-            <div className="w-16" />
+            <button
+              onClick={() => setShowMobileSidebar(!showMobileSidebar)}
+              className="md:hidden flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <MessageSquare className="h-5 w-5" />
+              {getVersionFeedback().length > 0 && (
+                <span className="text-xs bg-primary text-primary-foreground rounded-full px-1.5">
+                  {getVersionFeedback().length}
+                </span>
+              )}
+            </button>
+            <div className="w-16 hidden md:block" />
           </header>
 
           {/* Main content */}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden relative">
             {/* File preview area */}
             <div className="flex-1 relative bg-muted/30 flex flex-col overflow-hidden">
-              {/* Navigation */}
+              {/* Navigation buttons - hidden on mobile, use swipe */}
               <button
-                onClick={() => {
-                  const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
-                  if (currentIndex > 0) {
-                    setSelectedFile(displayFiles[currentIndex - 1])
-                    setSelectedVersionId(null)
-                    setIsViewingOldVersion(false)
-                    setPendingMarkup(null)
-                    setMarkupMode(false)
-                    setHighlightedFeedbackId(null)
-                  }
-                }}
+                onClick={() => navigateFile(-1)}
                 disabled={displayFiles.findIndex((f) => f.id === selectedFile.id) === 0}
-                className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity"
+                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity md:hidden"
               >
-                <ChevronLeft className="h-6 w-6" />
+                <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
               <button
-                onClick={() => {
-                  const currentIndex = displayFiles.findIndex((f) => f.id === selectedFile.id)
-                  if (currentIndex < displayFiles.length - 1) {
-                    setSelectedFile(displayFiles[currentIndex + 1])
-                    setSelectedVersionId(null)
-                    setIsViewingOldVersion(false)
-                    setPendingMarkup(null)
-                    setMarkupMode(false)
-                    setHighlightedFeedbackId(null)
-                  }
-                }}
+                onClick={() => navigateFile(1)}
                 disabled={displayFiles.findIndex((f) => f.id === selectedFile.id) === displayFiles.length - 1}
-                className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity"
+                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-background/90 shadow-lg flex items-center justify-center opacity-80 hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-opacity md:right-4 md:hidden"
               >
-                <ChevronRight className="h-6 w-6" />
+                <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
 
               <div className="flex-1 overflow-hidden">
@@ -666,8 +681,25 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
               </div>
             </div>
 
-            {/* Sidebar */}
-            <div className="w-80 bg-background border-l border-border flex flex-col shrink-0">
+            {/* Sidebar - Desktop always visible, Mobile slide-over */}
+            <div
+              className={`
+              fixed md:relative inset-y-0 right-0 z-20
+              w-full sm:w-80 bg-background border-l border-border flex flex-col shrink-0
+              transform transition-transform duration-300 ease-in-out
+              ${showMobileSidebar ? "translate-x-0" : "translate-x-full md:translate-x-0"}
+            `}
+            >
+              {/* Mobile sidebar header */}
+              <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border">
+                <h3 className="font-medium">Feedback</h3>
+                <button
+                  onClick={() => setShowMobileSidebar(false)}
+                  className="text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
               {/* Sidebar header */}
               <div className="px-4 py-2 border-b border-border shrink-0">
                 <div className="flex items-center gap-2">
@@ -905,6 +937,11 @@ export function ClientProjectView({ project, initialFiles }: ClientProjectViewPr
             </div>
           </div>
         </div>
+      )}
+
+      {/* Mobile sidebar backdrop */}
+      {showMobileSidebar && (
+        <div className="fixed inset-0 bg-black/50 z-10 md:hidden" onClick={() => setShowMobileSidebar(false)} />
       )}
     </div>
   )

@@ -23,8 +23,8 @@ export default async function AccountPage() {
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader user={user} />
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
-        <h1 className="text-3xl font-bold tracking-tight mb-8">Account</h1>
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 max-w-2xl">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-6 sm:mb-8">Account</h1>
         <AccountForm user={user} />
       </main>
     </div>

@@ -42,7 +42,7 @@ export function ProjectsList({ projects }: ProjectsListProps) {
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {projects.map((project) => {
         const progress = project.total_files > 0 ? Math.round((project.approved_files / project.total_files) * 100) : 0
         const isCopied = copiedId === project.id
@@ -50,7 +50,7 @@ export function ProjectsList({ projects }: ProjectsListProps) {
         return (
           <Link key={project.id} href={`/dashboard/projects/${project.id}`}>
             <Card className="h-full hover:border-primary/50 transition-all cursor-pointer group">
-              <CardContent className="p-6 space-y-3">
+              <CardContent className="p-4 sm:p-6 space-y-3">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">

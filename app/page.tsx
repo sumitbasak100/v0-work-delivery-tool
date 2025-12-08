@@ -19,19 +19,25 @@ export default function HomePage() {
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
-        <div className="max-w-[1280px] mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold tracking-tight">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+          <Link href="/" className="text-lg sm:text-xl font-bold tracking-tight">
             Sendro
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <ThemeToggle />
             <Link href="/auth/login">
-              <Button variant="ghost" className="cursor-pointer">
+              <Button variant="ghost" size="sm" className="cursor-pointer hidden sm:inline-flex">
                 Login
+              </Button>
+              <Button variant="ghost" size="icon" className="cursor-pointer sm:hidden h-9 w-9">
+                <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
             <Link href="/auth/sign-up">
-              <Button className="cursor-pointer">Get Started</Button>
+              <Button size="sm" className="cursor-pointer">
+                <span className="hidden sm:inline">Get Started</span>
+                <span className="sm:hidden">Start</span>
+              </Button>
             </Link>
           </div>
         </div>
@@ -39,27 +45,27 @@ export default function HomePage() {
 
       <main className="flex-1">
         {/* Hero Section - Two Column Layout */}
-        <section className="max-w-[1280px] mx-auto px-6 py-20 md:py-28">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+        <section className="max-w-[1280px] mx-auto px-4 sm:px-6 py-12 sm:py-20 md:py-28">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center">
             {/* Left - Copy */}
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
+            <div className="text-center lg:text-left">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4 sm:mb-6">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                 </span>
                 Now with visual markup feedback
               </div>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-balance leading-[1.1] mb-6">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-balance leading-[1.1] mb-4 sm:mb-6">
                 Deliver work.
                 <br />
                 <span className="text-muted-foreground">Get feedback.</span>
               </h1>
-              <p className="text-lg md:text-xl text-muted-foreground text-pretty max-w-lg mb-8">
+              <p className="text-base sm:text-lg md:text-xl text-muted-foreground text-pretty max-w-lg mx-auto lg:mx-0 mb-6 sm:mb-8">
                 The simplest way for creative teams to share files with clients, collect visual feedback, and get
                 approvals. No client login required.
               </p>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
                 <Link href="/auth/sign-up">
                   <Button size="lg" className="gap-2 h-12 px-6 text-base cursor-pointer">
                     Start for free <ArrowRight className="h-4 w-4" />
@@ -133,22 +139,22 @@ export default function HomePage() {
 
         {/* Stats Section */}
         <section className="border-y border-border bg-muted/30">
-          <div className="max-w-[1280px] mx-auto px-6 py-12">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-              <div className="text-center md:text-left">
-                <div className="text-3xl md:text-4xl font-bold mb-1">50%</div>
+          <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8 sm:py-12">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 md:gap-12">
+              <div className="text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1">50%</div>
                 <div className="text-sm text-muted-foreground">faster approvals</div>
               </div>
-              <div className="text-center md:text-left">
-                <div className="text-3xl md:text-4xl font-bold mb-1">Zero</div>
+              <div className="text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1">Zero</div>
                 <div className="text-sm text-muted-foreground">client logins needed</div>
               </div>
-              <div className="text-center md:text-left">
-                <div className="text-3xl md:text-4xl font-bold mb-1">100%</div>
+              <div className="text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1">100%</div>
                 <div className="text-sm text-muted-foreground">visual feedback</div>
               </div>
-              <div className="text-center md:text-left">
-                <div className="text-3xl md:text-4xl font-bold mb-1">Free</div>
+              <div className="text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1">Free</div>
                 <div className="text-sm text-muted-foreground">to get started</div>
               </div>
             </div>
@@ -156,17 +162,17 @@ export default function HomePage() {
         </section>
 
         {/* How it works - Visual Steps */}
-        <section className="max-w-[1280px] mx-auto px-6 py-24">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-balance">How it works</h2>
+        <section className="max-w-[1280px] mx-auto px-4 sm:px-6 py-16 sm:py-24">
+          <div className="text-center mb-10 sm:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 text-balance">How it works</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
               Three simple steps to streamline your client workflow
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 md:gap-6">
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-6">
             {/* Step 1 */}
             <div className="relative group">
-              <div className="bg-muted/50 rounded-2xl p-6 border border-border h-full transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
+              <div className="bg-muted/50 rounded-2xl p-6 sm:p-8 border border-border h-full transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-bold">
                     1
@@ -185,7 +191,7 @@ export default function HomePage() {
 
             {/* Step 2 */}
             <div className="relative group">
-              <div className="bg-muted/50 rounded-2xl p-6 border border-border h-full transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
+              <div className="bg-muted/50 rounded-2xl p-6 sm:p-8 border border-border h-full transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-bold">
                     2
@@ -204,7 +210,7 @@ export default function HomePage() {
 
             {/* Step 3 */}
             <div className="relative group">
-              <div className="bg-muted/50 rounded-2xl p-6 border border-border h-full transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
+              <div className="bg-muted/50 rounded-2xl p-6 sm:p-8 border border-border h-full transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-bold">
                     3
@@ -225,17 +231,19 @@ export default function HomePage() {
 
         {/* Features Bento Grid */}
         <section className="border-t border-border bg-muted/30">
-          <div className="max-w-[1280px] mx-auto px-6 py-24">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-balance">Everything you need</h2>
+          <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-16 sm:py-24">
+            <div className="text-center mb-10 sm:mb-16">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 text-balance">
+                Everything you need
+              </h2>
               <p className="text-muted-foreground max-w-md mx-auto">
                 Powerful features wrapped in a simple, intuitive interface
               </p>
             </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Feature 1 - Large */}
-              <div className="md:col-span-2 bg-background rounded-2xl p-8 border border-border">
-                <div className="flex flex-col md:flex-row gap-8 items-center">
+              <div className="sm:col-span-2 bg-background rounded-2xl p-6 sm:p-8 border border-border">
+                <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-center">
                   <div className="flex-1">
                     <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                       <MousePointer2 className="h-6 w-6 text-primary" />
@@ -246,7 +254,7 @@ export default function HomePage() {
                       email threads.
                     </p>
                   </div>
-                  <div className="w-full md:w-64 h-40 bg-muted rounded-xl flex items-center justify-center relative">
+                  <div className="w-full sm:w-64 h-40 bg-muted rounded-xl flex items-center justify-center relative">
                     <div className="absolute top-4 left-6 h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
                       1
                     </div>
@@ -259,7 +267,7 @@ export default function HomePage() {
               </div>
 
               {/* Feature 2 */}
-              <div className="bg-background rounded-2xl p-6 border border-border">
+              <div className="bg-background rounded-2xl p-6 sm:p-8 border border-border">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <Shield className="h-5 w-5 text-primary" />
                 </div>
@@ -268,7 +276,7 @@ export default function HomePage() {
               </div>
 
               {/* Feature 3 */}
-              <div className="bg-background rounded-2xl p-6 border border-border">
+              <div className="bg-background rounded-2xl p-6 sm:p-8 border border-border">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <Clock className="h-5 w-5 text-primary" />
                 </div>
@@ -279,7 +287,7 @@ export default function HomePage() {
               </div>
 
               {/* Feature 4 */}
-              <div className="bg-background rounded-2xl p-6 border border-border">
+              <div className="bg-background rounded-2xl p-6 sm:p-8 border border-border">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <Play className="h-5 w-5 text-primary" />
                 </div>
@@ -290,7 +298,7 @@ export default function HomePage() {
               </div>
 
               {/* Feature 5 */}
-              <div className="bg-background rounded-2xl p-6 border border-border">
+              <div className="bg-background rounded-2xl p-6 sm:p-8 border border-border">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <Upload className="h-5 w-5 text-primary" />
                 </div>
@@ -302,10 +310,12 @@ export default function HomePage() {
         </section>
 
         {/* Status Preview Section */}
-        <section className="max-w-[1280px] mx-auto px-6 py-24">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-balance">Track every approval at a glance</h2>
+        <section className="max-w-[1280px] mx-auto px-4 sm:px-6 py-16 sm:py-24">
+          <div className="grid lg:grid-cols-2 gap-8 sm:gap-12 items-center">
+            <div className="text-center lg:text-left">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 text-balance">
+                Track every approval at a glance
+              </h2>
               <p className="text-muted-foreground mb-8">
                 See the status of all your files instantly. Know exactly what's approved, what needs changes, and what's
                 pending review.
@@ -325,7 +335,7 @@ export default function HomePage() {
                 </li>
               </ul>
             </div>
-            <div className="bg-muted/50 rounded-2xl p-6 border border-border">
+            <div className="bg-muted/50 rounded-2xl p-6 sm:p-8 border border-border">
               <div className="text-sm font-medium text-muted-foreground mb-4">Project: Brand Redesign</div>
               <div className="space-y-3">
                 <div className="flex items-center gap-4 bg-background rounded-xl p-4 border border-border">
@@ -371,8 +381,10 @@ export default function HomePage() {
 
         {/* CTA */}
         <section className="border-t border-border">
-          <div className="max-w-[1280px] mx-auto px-6 py-24 text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-balance">Ready to streamline your workflow?</h2>
+          <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 text-balance">
+              Ready to streamline your workflow?
+            </h2>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
               Join creative teams already using Sendro to deliver work and get approvals faster.
             </p>
@@ -386,8 +398,8 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8">
-        <div className="max-w-[1280px] mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-border">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-sm text-muted-foreground">
             &copy; {new Date().getFullYear()} Sendro. All rights reserved.
           </div>

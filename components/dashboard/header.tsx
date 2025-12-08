@@ -40,8 +40,8 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
 
   return (
     <header className="border-b border-border bg-card">
-      <div className="max-w-[1280px] mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href="/dashboard" className="text-xl font-semibold tracking-tight">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+        <Link href="/dashboard" className="text-lg sm:text-xl font-semibold tracking-tight">
           Sendro
         </Link>
         <div className="flex items-center gap-2">

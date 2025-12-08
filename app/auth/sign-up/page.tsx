@@ -35,7 +35,7 @@ export default function SignUpPage() {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -46,11 +46,25 @@ export default function SignUpPage() {
       })
       if (error) throw error
 
+      if (data.session) {
+        router.refresh()
+        router.push("/dashboard")
+        return
+      }
+
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
-      if (signInError) throw signInError
+
+      if (signInError) {
+        if (signInError.message.toLowerCase().includes("email not confirmed")) {
+          throw new Error(
+            "Please disable email confirmation in your Supabase dashboard (Authentication > Providers > Email > Confirm email)",
+          )
+        }
+        throw signInError
+      }
 
       router.refresh()
       router.push("/dashboard")

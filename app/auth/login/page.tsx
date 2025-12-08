@@ -74,6 +74,7 @@ export default function LoginPage() {
                       <Label htmlFor="password">Password</Label>
                       <Link
                         href="/auth/forgot-password"
+                        tabIndex={-1}
                         className="text-xs text-muted-foreground hover:text-primary underline-offset-4 hover:underline"
                       >
                         Forgot password?
